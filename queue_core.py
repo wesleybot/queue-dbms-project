@@ -11,12 +11,11 @@ from datetime import datetime
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
-    # 雲端模式：強制限制 max_connections=1
-    # ★ 移除 ssl_cert_reqs=None
+    # 雲端模式：放寬到 10 個連線 (免費版上限通常是 30，預留一些給 Session)
     pool = redis.ConnectionPool.from_url(
         REDIS_URL, 
         decode_responses=True, 
-        max_connections=1, 
+        max_connections=10,  # [修改點] 從 1 改成 10
         socket_timeout=5
     )
     r = redis.Redis(connection_pool=pool)
