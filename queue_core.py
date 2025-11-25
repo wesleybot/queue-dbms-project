@@ -6,31 +6,34 @@ import redis
 from datetime import datetime
 
 # ---------------------------------------------------------
-# [關鍵修改] 智慧連線切換
+# [關鍵修改] 移除 ssl_cert_reqs 參數
 # ---------------------------------------------------------
-# 嘗試從環境變數讀取雲端網址
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
-    # 雲端模式：使用 URL 連線
-    # decode_responses=True 確保讀出來是字串不是 bytes
-    r = redis.from_url(REDIS_URL, decode_responses=True)
+    # 雲端模式：強制限制 max_connections=1
+    # ★ 移除 ssl_cert_reqs=None
+    pool = redis.ConnectionPool.from_url(
+        REDIS_URL, 
+        decode_responses=True, 
+        max_connections=1, 
+        socket_timeout=5
+    )
+    r = redis.Redis(connection_pool=pool)
 else:
-    # 本地模式：連線 localhost
+    # 本地模式
     r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
-# 確保 Index 存在
+# 確保 Index 存在 (包在 try-except 避免連線失敗導致 crash)
 try:
     r.execute_command(
         "FT.CREATE", "idx:ticket", "ON", "HASH", "PREFIX", "1", "ticket:",
         "SCHEMA", "service", "TEXT", "status", "TAG", "created_at", "NUMERIC", "SORTABLE"
     )
-except redis.exceptions.ResponseError:
-    pass
+except Exception as e:
+    print(f"Index creation skipped or failed: {e}")
 
-# ---------------------------------------------------------
-# create_ticket
-# ---------------------------------------------------------
+# ... (以下函式保持不變) ...
 def create_ticket(service: str, line_user_id: str = "") -> dict:
     pipe = r.pipeline()
     ticket_id = r.incr("ticket:global:id")
@@ -61,9 +64,6 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
         "created_at": now
     }
 
-# ---------------------------------------------------------
-# call_next
-# ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
     stream_key = f"queue_stream:{service}"
     group_name = "counters_group"
@@ -96,7 +96,6 @@ def call_next(service: str, counter_name: str) -> dict | None:
 
     created_at = int(r.hget(ticket_key, "created_at") or now)
 
-    # 更新狀態為 serving
     r.hset(ticket_key, mapping={
         "status": "serving",
         "called_at": now,
@@ -107,7 +106,6 @@ def call_next(service: str, counter_name: str) -> dict | None:
     number = r.hget(ticket_key, "number")
     r.set(current_key, number)
 
-    # 統計
     wait_seconds = now - created_at
     date_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
     stats_key = f"stats:{date_str}:{service}:{counter_name}"
@@ -128,7 +126,6 @@ def call_next(service: str, counter_name: str) -> dict | None:
         "called_at": now,
     }
 
-    # 發送 Pub/Sub
     channel = f"channel:queue_update:{service}"
     r.publish(channel, json.dumps(ticket_info))
 
