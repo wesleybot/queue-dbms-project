@@ -24,12 +24,13 @@ from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv
 
+# 載入 .env
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key-change-me"
 
-# 環境變數
+# 環境變數處理
 channel_secret = os.environ.get("LINE_CHANNEL_SECRET", "")
 channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_CHANNEL_SECRET = channel_secret.strip() if channel_secret else None
@@ -38,10 +39,13 @@ LINE_CHANNEL_ACCESS_TOKEN = channel_token.strip() if channel_token else None
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN) if LINE_CHANNEL_ACCESS_TOKEN else None
 handler = WebhookHandler(LINE_CHANNEL_SECRET) if LINE_CHANNEL_SECRET else None
 
-# Redis Session 連線 (這個流量很低，維持原樣即可)
+# ----------------------------------------------------------
+# [關鍵修改] Redis Session 連線設定
+# ----------------------------------------------------------
 REDIS_URL = os.environ.get("REDIS_URL")
 if REDIS_URL:
-    session_redis = redis.from_url(REDIS_URL, ssl_cert_reqs=None)
+    # 這裡不需要 connection pool，因為 flask-session 會自己管理
+    session_redis = redis.from_url(REDIS_URL)
 else:
     session_redis = redis.Redis(host="localhost", port=6379, db=0)
 
@@ -67,8 +71,7 @@ def clear_line_user_ticket(user_id: str):
     r.delete(key)
 
 # ============================================================
-# 🔥 [核心架構升級] 廣播系統 (Message Announcer)
-# 解決 Redis 連線數爆炸的關鍵：只用 1 個 Redis 連線服務所有人
+# 🔥 [核心架構] 廣播系統 (Message Announcer)
 # ============================================================
 class MessageAnnouncer:
     def __init__(self):
@@ -80,8 +83,7 @@ class MessageAnnouncer:
         return q
 
     def announce(self, msg):
-        # 廣播給所有正在聽的 Queue (也就是所有 SSE 連線)
-        # 使用逆向迴圈以便安全移除斷線的 listener
+        # 廣播給所有正在聽的 Queue
         for i in reversed(range(len(self.listeners))):
             try:
                 self.listeners[i].put_nowait(msg)
@@ -93,9 +95,8 @@ announcer = MessageAnnouncer()
 
 # 背景執行緒：監聽 Redis 並轉發給廣播器
 def redis_listener_worker():
-    # 這是「唯一」需要持續連線 Redis 的地方
     if REDIS_URL:
-        pubsub_r = redis.from_url(REDIS_URL, decode_responses=True, ssl_cert_reqs=None)
+        pubsub_r = redis.from_url(REDIS_URL, decode_responses=True)
     else:
         pubsub_r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
         
@@ -108,26 +109,28 @@ def redis_listener_worker():
         if message["type"] == "pmessage":
             data_str = message["data"]
             # 1. 轉發給廣播器 (服務網頁 SSE)
-            # 格式化為 SSE 需要的字串
             sse_msg = f"data: {data_str}\n\n"
             announcer.announce(sse_msg)
             
             # 2. 處理 LINE 推播 (服務 LINE 使用者)
             try:
                 ticket_data = json.loads(data_str)
-                handle_push_notification(ticket_data, pubsub_r)
+                # 這裡為了避免多執行緒競爭，我們需要一個獨立的 Redis 連線來操作鎖
+                # 簡單起見，直接用 pubsub_r (雖然它主要在 listen，但同一連線操作其他指令可能會 block)
+                # 最安全是用 r (從 queue_core 來的全域連線)
+                handle_push_notification(ticket_data)
             except Exception as e:
                 print(f"🔴 Push Error: {e}", flush=True)
 
-def handle_push_notification(ticket_data, redis_conn):
+def handle_push_notification(ticket_data):
     # 獨立出來的推播邏輯
     ticket_id = ticket_data["ticket_id"]
     number = ticket_data["number"]
     counter = ticket_data["counter"]
     
-    # 去重鎖
+    # 去重鎖 (使用全域 r 連線)
     dedup_key = f"dedup:push:{ticket_id}:{number}"
-    is_first_handler = redis_conn.set(dedup_key, "1", ex=60, nx=True)
+    is_first_handler = r.set(dedup_key, "1", ex=60, nx=True)
     
     if not is_first_handler:
         return
@@ -149,15 +152,12 @@ if not any(t.name == "GlobalRedisListener" for t in threading.enumerate()):
     t.start()
 
 # ============================================================
-# SSE 路由 (現在改成聽廣播器，不再直連 Redis)
+# SSE 路由 (聽廣播器)
 # ============================================================
 @app.route("/events/<service>")
 def events(service):
     def stream():
-        # 1. 每個使用者連進來，先給他一個記憶體 Queue (不消耗 Redis)
         messages = announcer.listen()
-        
-        # 2. 發送初始狀態 (Initial State) - 這裡還是要讀一次 Redis，但只是一次性的 get
         try:
             current_num = r.get(f"current_number:{service}")
             if current_num:
@@ -166,14 +166,13 @@ def events(service):
         except:
             pass
 
-        # 3. 進入無窮迴圈，等待廣播器的消息
         while True:
-            msg = messages.get()  # 這裡會 Block 住，直到廣播器有消息
+            msg = messages.get()
             yield msg
 
     return Response(stream(), mimetype="text/event-stream")
 
-# ------------------ 以下保持不變 (Webhook, Session, API) ------------------
+# ------------------ 以下路由保持不變 ------------------
 
 @app.route("/line/webhook", methods=["POST"])
 def line_webhook():
