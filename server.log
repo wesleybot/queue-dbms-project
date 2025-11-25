@@ -1,0 +1,439 @@
+[2025-11-26 00:10:48 +0800] [21610] [INFO] Starting gunicorn 23.0.0
+[2025-11-26 00:10:48 +0800] [21610] [INFO] Listening at: http://127.0.0.1:5000 (21610)
+[2025-11-26 00:10:48 +0800] [21610] [INFO] Using worker: sync
+[2025-11-26 00:10:48 +0800] [21617] [INFO] Booting worker with pid: 21617
+[2025-11-26 00:10:48 +0800] [21621] [INFO] Booting worker with pid: 21621
+[2025-11-26 00:10:48 +0800] [21623] [INFO] Booting worker with pid: 21623
+🚀 Monitor Thread Launched by Gunicorn!
+🚀 Monitor Thread Launched by Gunicorn!
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+🟢 [Background] LINE Push Notification Worker Started...
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:11:23 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21617)
+[2025-11-26 00:11:23 +0800] [21617] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:11:23 +0800] [21617] [INFO] Worker exiting (pid: 21617)
+[2025-11-26 00:11:24 +0800] [21722] [INFO] Booting worker with pid: 21722
+[2025-11-26 00:11:26 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21623)
+[2025-11-26 00:11:26 +0800] [21623] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:11:26 +0800] [21623] [INFO] Worker exiting (pid: 21623)
+🚀 Monitor Thread Launched by Gunicorn!
+[2025-11-26 00:11:26 +0800] [21724] [INFO] Booting worker with pid: 21724
+🟢 [Background] LINE Push Notification Worker Started...
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:11:38 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21621)
+[2025-11-26 00:11:38 +0800] [21621] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:11:38 +0800] [21621] [INFO] Worker exiting (pid: 21621)
+[2025-11-26 00:11:38 +0800] [21726] [INFO] Booting worker with pid: 21726
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:11:59 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21724)
+[2025-11-26 00:11:59 +0800] [21724] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:11:59 +0800] [21724] [INFO] Worker exiting (pid: 21724)
+[2025-11-26 00:12:00 +0800] [21734] [INFO] Booting worker with pid: 21734
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:12:32 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21726)
+[2025-11-26 00:12:32 +0800] [21726] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:12:32 +0800] [21726] [INFO] Worker exiting (pid: 21726)
+[2025-11-26 00:12:32 +0800] [21743] [INFO] Booting worker with pid: 21743
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:13:04 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21722)
+[2025-11-26 00:13:04 +0800] [21722] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:13:04 +0800] [21722] [INFO] Worker exiting (pid: 21722)
+[2025-11-26 00:13:04 +0800] [21751] [INFO] Booting worker with pid: 21751
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:13:37 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21734)
+[2025-11-26 00:13:37 +0800] [21734] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:13:37 +0800] [21734] [INFO] Worker exiting (pid: 21734)
+[2025-11-26 00:13:37 +0800] [21759] [INFO] Booting worker with pid: 21759
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:14:10 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21751)
+[2025-11-26 00:14:10 +0800] [21751] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:14:10 +0800] [21751] [INFO] Worker exiting (pid: 21751)
+[2025-11-26 00:14:10 +0800] [21767] [INFO] Booting worker with pid: 21767
+🚀 Monitor Thread Launched by Gunicorn!
+🟢 [Background] LINE Push Notification Worker Started...
+[2025-11-26 00:14:42 +0800] [21610] [CRITICAL] WORKER TIMEOUT (pid:21743)
+[2025-11-26 00:14:42 +0800] [21743] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 182, in handle_request
+    for item in respiter:
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wsgi.py", line 256, in __next__
+    return self._next()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/werkzeug/wrappers/response.py", line 32, in _iter_encoded
+    for item in iterable:
+  File "/home/user/redis-queue-qr/app.py", line 313, in generate
+    for message in pubsub.listen():
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 1154, in listen
+    response = self.handle_message(self.parse_response(block=True))
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 993, in parse_response
+    response = self._execute(conn, try_read)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 967, in _execute
+    response = conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 968, in <lambda>
+    lambda: command(*args, **kwargs),
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 991, in try_read
+    return conn.read_response(disconnect_on_error=False, push_request=True)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+    sys.exit(1)
+SystemExit: 1
+[2025-11-26 00:14:42 +0800] [21743] [INFO] Worker exiting (pid: 21743)
+[2025-11-26 00:14:42 +0800] [21775] [INFO] Booting worker with pid: 21775
+🚀 Monitor Thread Launched by Gunicorn!
+[2025-11-26 00:14:44 +0800] [21610] [INFO] Handling signal: int
+[2025-11-26 00:14:44 +0800] [21759] [INFO] Worker exiting (pid: 21759)
+[2025-11-26 00:14:44 +0800] [21775] [INFO] Worker exiting (pid: 21775)
+[2025-11-26 00:14:44 +0800] [21767] [ERROR] Error handling request /events/register
+Traceback (most recent call last):
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+    self.handle_request(listener, req, client, addr)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+    respiter = self.wsgi(environ, resp.start_response)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/flask/app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/flask/app.py", line 1510, in wsgi_app
+    ctx.push()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/flask/ctx.py", line 386, in push
+    self.session = session_interface.open_session(self.app, self.request)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/flask_session/base.py", line 350, in open_session
+    saved_session_data = self._retrieve_session_data(store_id)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/flask_session/redis/redis.py", line 64, in _retrieve_session_data
+    serialized_session_data = self.client.get(store_id)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/commands/core.py", line 1834, in get
+    return self.execute_command("GET", name, keys=[name])
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 657, in execute_command
+    return self._execute_command(*args, **options)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 668, in _execute_command
+    return conn.retry.call_with_retry(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/retry.py", line 116, in call_with_retry
+    return do()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 669, in <lambda>
+    lambda: self._send_command_parse_response(
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 640, in _send_command_parse_response
+    return self.parse_response(conn, command_name, **options)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/client.py", line 691, in parse_response
+    response = connection.read_response()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/connection.py", line 1133, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/redis/_parsers/socket.py", line 65, in _read_from_socket
+    data = self._sock.recv(socket_read_size)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 198, in handle_quit
+    time.sleep(0.1)
+  File "/home/user/redis-queue-qr/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 199, in handle_quit
+    sys.exit(0)
+SystemExit: 0
+[2025-11-26 00:14:45 +0800] [21767] [INFO] Worker exiting (pid: 21767)
+[2025-11-26 00:14:45 +0800] [21610] [INFO] Shutting down: Master

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>管理員後台 - 叫號系統</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+</head>
+<body class="bg-light">
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Queue Ticket System 管理後台</a>
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-light small">櫃台工作區</span>
+        <a href="/admin/logout" class="btn btn-outline-light btn-sm">登出</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row g-3">
+      <!-- 左：叫號控制 -->
+      <div class="col-md-6">
+        <div class="card shadow-sm">
+          <div class="card-header">
+            <strong>叫號控制台</strong>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <label class="form-label">服務類型 (service)</label>
+              <select id="service-select" class="form-select">
+                <option value="register" selected>register（預設）</option>
+                <!-- 之後若有更多 service，可再加 option -->
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">櫃台名稱 (counter)</label>
+              <input
+                id="counter-input"
+                type="text"
+                class="form-control"
+                placeholder="例如：counter-1、counter-2"
+                value="counter-1"
+              >
+              <div class="form-text">
+                這個名稱會顯示在使用者手機上，提醒他要去哪一個櫃台報到。
+              </div>
+            </div>
+            <button id="btn-call-next" class="btn btn-primary">
+              叫下一位
+            </button>
+
+            <hr>
+
+            <h6 class="mt-3">最近一次叫號結果</h6>
+            <pre id="last-call-result" class="small bg-light border rounded p-2" style="min-height:4rem;">
+尚未叫號</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右：即時統計 + 今日統計 -->
+      <div class="col-md-6">
+        <!-- 目前排隊狀態（RediSearch Aggregation） -->
+        <div class="card shadow-sm mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>目前排隊狀態（來自 RediSearch Aggregation）</strong>
+            <span class="badge bg-secondary" id="stats-refresh-time">--</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted small mb-2">
+              下表統計的是目前各服務的等待中 / 服務中人數，
+              從 ticket:* 的索引 <code>idx:ticket</code> 使用
+              <code>FT.AGGREGATE</code> 即時計算。
+            </p>
+            <table class="table table-sm table-bordered align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>服務類型 service</th>
+                  <th class="text-end">等待中 waiting</th>
+                  <th class="text-end">服務中 serving</th>
+                </tr>
+              </thead>
+              <tbody id="stats-body">
+                <tr>
+                  <td colspan="3" class="text-center text-muted">
+                    載入中…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 今日完成服務統計（Hash + get_stats_for_date） -->
+        <div class="card shadow-sm">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>今日完成服務統計（來自 Redis Hash 統計）</strong>
+            <small class="text-muted" id="today-summary-date"></small>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-2">
+              顯示今天已被叫號（<code>call_next</code>）的人數與平均等待時間，資料來源為
+              <code>stats:YYYYMMDD:&lt;service&gt;:ALL</code> 這些 Hash。
+            </p>
+
+            <p class="mb-2">
+              今日總服務人數：
+              <span class="fw-bold" id="today-total-count">0</span> 人，
+              全體平均等待時間約：
+              <span class="fw-bold" id="today-avg-wait">0.0</span> 秒
+            </p>
+
+            <table class="table table-sm table-bordered mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>服務類型 service</th>
+                  <th>今日服務人數</th>
+                  <th>平均等待時間（秒）</th>
+                </tr>
+              </thead>
+              <tbody id="today-stats-body">
+                <tr>
+                  <td colspan="3" class="text-center text-muted">
+                    目前尚無統計資料
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // 叫下一位
+    document.getElementById('btn-call-next').addEventListener('click', async () => {
+      const service = document.getElementById('service-select').value;
+      const counter = document.getElementById('counter-input').value.trim() || 'counter-1';
+
+      try {
+        const res = await fetch(`/counter/${service}/next`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ counter })
+        });
+        const data = await res.json();
+        const pre = document.getElementById('last-call-result');
+
+        if (data.message === 'no one in queue') {
+          pre.textContent = `目前 service="${service}" 沒有人在排隊。`;
+        } else {
+          pre.textContent =
+            `叫到號碼：${data.number}\n` +
+            `ticket_id：${data.ticket_id}\n` +
+            `service：${data.service}\n` +
+            `櫃台 counter：${data.counter}\n` +
+            `叫號時間 (Unix)：${data.called_at}`;
+        }
+      } catch (err) {
+        console.error(err);
+        document.getElementById('last-call-result').textContent =
+          '叫號時發生錯誤，請稍後再試。';
+      }
+    });
+
+    // 即時統計：呼叫 /admin/stats/live （由 RediSearch Aggregation 提供）
+    async function loadLiveStats() {
+      try {
+        const res = await fetch('/admin/stats/live');
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
+        const data = await res.json(); // [{service, status, count}, ...]
+
+        // 整理成每個 service 一列：{ waiting, serving }
+        const byService = {};
+        data.forEach(item => {
+          const svc = item.service || '(未設定)';
+          if (!byService[svc]) {
+            byService[svc] = { waiting: 0, serving: 0 };
+          }
+          if (item.status === 'waiting') {
+            byService[svc].waiting = item.count;
+          } else if (item.status === 'serving') {
+            byService[svc].serving = item.count;
+          }
+        });
+
+        const tbody = document.getElementById('stats-body');
+        tbody.innerHTML = '';
+
+        const services = Object.keys(byService);
+        if (services.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="3" class="text-center text-muted">
+                目前沒有任何等待中或服務中的號碼。
+              </td>
+            </tr>`;
+        } else {
+          services.forEach(svc => {
+            const row = byService[svc];
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${svc}</td>
+              <td class="text-end">${row.waiting}</td>
+              <td class="text-end">${row.serving}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        const now = new Date();
+        document.getElementById('stats-refresh-time').textContent =
+          now.toLocaleTimeString();
+      } catch (err) {
+        console.error(err);
+        document.getElementById('stats-body').innerHTML = `
+          <tr>
+            <td colspan="3" class="text-center text-danger">
+              無法載入統計資料。
+            </td>
+          </tr>`;
+      }
+    }
+
+    // 今日完成服務統計：呼叫 /admin/stats/today-summary
+    async function loadTodaySummary() {
+      try {
+        const res = await fetch('/admin/stats/today-summary');
+        if (!res.ok) {
+          console.error('today-summary error', await res.text());
+          return;
+        }
+
+        const data = await res.json();
+
+        // 日期顯示
+        const dateLabel = document.getElementById('today-summary-date');
+        if (dateLabel && data.date) {
+          const d = data.date;
+          dateLabel.textContent = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+        }
+
+        // 總人數與整體平均等待時間
+        document.getElementById('today-total-count').textContent =
+          data.total_count ?? 0;
+
+        const avgSpan = document.getElementById('today-avg-wait');
+        if (data.total_count > 0) {
+          avgSpan.textContent = data.overall_avg_wait_seconds.toFixed(1);
+        } else {
+          avgSpan.textContent = '0.0';
+        }
+
+        // 各 service 統計（只會拿到 counter = ALL）
+        const tbody = document.getElementById('today-stats-body');
+        tbody.innerHTML = '';
+
+        if (!data.services || data.services.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="3" class="text-center text-muted">
+                目前尚無統計資料
+              </td>
+            </tr>`;
+          return;
+        }
+
+        for (const row of data.services) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.service}</td>
+            <td>${row.count}</td>
+            <td>${row.avg_wait_seconds.toFixed(1)} 秒</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error('loadTodaySummary error', err);
+      }
+    }
+
+    // 初次載入 + 每 5 秒更新一次 live stats，每 30 秒更新一次今日統計
+    loadLiveStats();
+    setInterval(loadLiveStats, 5000);
+
+    loadTodaySummary();
+    setInterval(loadTodaySummary, 30000);
+  </script>
+</body>
+</html>

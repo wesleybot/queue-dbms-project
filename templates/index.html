@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <title>Queue Ticket System 叫號系統</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <style>
+      :root {
+        --primary-color: #4e73df;
+        --secondary-color: #858796;
+        --success-color: #1cc88a;
+        --warning-color: #f6c23e;
+        --bg-gradient: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      }
+
+      body {
+        background: var(--bg-gradient);
+        font-family: "Noto Sans TC", sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Navbar 優化 */
+      .navbar {
+        background: rgba(255, 255, 255, 0.95) !important;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
+      }
+      .navbar-brand {
+        color: #333 !important;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      /* 主版面配置 */
+      .main-container {
+        flex: 1;
+        display: flex;
+        align-items: center; /* 垂直置中 */
+        justify-content: center;
+        padding: 2rem 1rem;
+      }
+
+      /* 左側：品牌形象區 (電腦版顯示，手機版隱藏或縮小) */
+      .brand-section {
+        padding-right: 3rem;
+        display: none; /* 預設隱藏 (手機) */
+      }
+      @media (min-width: 992px) {
+        .brand-section {
+          display: block; /* 電腦版顯示 */
+        }
+      }
+      .brand-title {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #2d3748;
+        line-height: 1.2;
+        margin-bottom: 1rem;
+      }
+      .brand-subtitle {
+        font-size: 1.2rem;
+        color: #718096;
+        margin-bottom: 2rem;
+      }
+      .feature-list i {
+        color: var(--primary-color);
+        width: 30px;
+      }
+
+      /* 右側：票卡設計 (Glassmorphism) */
+      .ticket-card {
+        border: none;
+        border-radius: 24px;
+        background: #ffffff;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        transition: transform 0.3s ease;
+      }
+      .ticket-card:hover {
+        transform: translateY(-5px);
+      }
+
+      .ticket-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        text-align: center;
+        color: white;
+        position: relative;
+      }
+      /* 裝飾圓弧 */
+      .ticket-header::after {
+        content: "";
+        position: absolute;
+        bottom: -20px;
+        left: 0;
+        width: 100%;
+        height: 40px;
+        background: #fff;
+        border-radius: 50% 50% 0 0;
+      }
+
+      .current-number-display {
+        font-size: 4.5rem;
+        font-weight: 800;
+        line-height: 1;
+        color: #4a5568;
+        margin: 1rem 0;
+        font-feature-settings: "tnum";
+        font-variant-numeric: tabular-nums;
+      }
+
+      .status-badge-lg {
+        font-size: 1rem;
+        padding: 0.5rem 1.5rem;
+        border-radius: 50px;
+        letter-spacing: 1px;
+      }
+
+      .info-row {
+        background: #f7fafc;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-top: 1.5rem;
+      }
+
+      .btn-action {
+        padding: 12px 24px;
+        font-weight: 600;
+        border-radius: 50px;
+        transition: all 0.2s;
+        width: 100%;
+      }
+      .btn-primary-soft {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+      }
+      .btn-primary-soft:hover {
+        opacity: 0.9;
+        transform: scale(1.02);
+        color: white;
+      }
+      .btn-primary-soft:disabled {
+        background: #cbd5e0;
+        transform: none;
+      }
+
+      /* QR Code 區域 */
+      #qrcode-container {
+        padding: 1rem;
+        background: white;
+        border-radius: 12px;
+        border: 2px dashed #e2e8f0;
+        margin-top: 1rem;
+        display: none !important; /* 預設隱藏 */
+      }
+
+      /* 動畫 */
+      @keyframes pulse-green {
+        0% {
+          box-shadow: 0 0 0 0 rgba(28, 200, 138, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(28, 200, 138, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(28, 200, 138, 0);
+        }
+      }
+      .animate-pulse {
+        animation: pulse-green 2s infinite;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg fixed-top">
+      <div class="container">
+        <a class="navbar-brand" href="#">
+          <i class="fa-solid fa-layer-group me-2 text-primary"></i>
+          Queue System
+        </a>
+        <div class="ms-auto">
+          <a
+            href="/admin/login"
+            class="btn btn-outline-dark btn-sm rounded-pill px-4"
+          >
+            <i class="fa-solid fa-user-gear me-1"></i> 管理員
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main-container container">
+      <div class="row w-100 align-items-center justify-content-center">
+        <div class="col-lg-6 brand-section">
+          <h1 class="brand-title">輕鬆排隊，<br />享受生活。</h1>
+          <p class="brand-subtitle">
+            別把時間浪費在站立等待。<br />
+            手機掃碼，隨時隨地掌握叫號進度。
+          </p>
+
+          <div class="feature-list mt-4">
+            <div class="mb-3 d-flex align-items-center">
+              <i class="fa-solid fa-check-circle fa-lg me-3"></i>
+              <span class="fs-5 text-dark">即時叫號通知 (Real-time)</span>
+            </div>
+            <div class="mb-3 d-flex align-items-center">
+              <i class="fa-solid fa-mobile-screen fa-lg me-3"></i>
+              <span class="fs-5 text-dark">手機就是叫號機 (Mobile First)</span>
+            </div>
+            <div class="mb-3 d-flex align-items-center">
+              <i class="fa-solid fa-earth-americas fa-lg me-3"></i>
+              <span class="fs-5 text-dark">環保無紙化 (Eco-Friendly)</span>
+            </div>
+          </div>
+
+          <div
+            class="mt-5 p-3 bg-white rounded-4 shadow-sm d-inline-block border"
+          >
+            <div class="d-flex align-items-center">
+              <div class="me-3 text-center">
+                <i class="fa-solid fa-qrcode fa-3x text-secondary"></i>
+              </div>
+              <div>
+                <div class="fw-bold text-dark">掃描加入排隊</div>
+                <div class="small text-muted">Scan to join queue</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5 col-md-8 col-sm-12">
+          <div class="card ticket-card">
+            <div class="ticket-header">
+              <h5 class="mb-0 fw-bold">目前叫號狀況</h5>
+              <small style="opacity: 0.8">Live Queue Status</small>
+            </div>
+
+            <div class="card-body text-center p-4">
+              <p
+                class="text-uppercase text-muted fw-bold small mb-0 tracking-wide"
+              >
+                Current Number
+              </p>
+              <div id="current-number" class="current-number-display">--</div>
+
+              <div id="user-info-area" class="mt-4">
+                <div class="info-row">
+                  <div class="row">
+                    <div class="col-6 border-end">
+                      <div class="small text-muted mb-1">我的號碼</div>
+                      <div id="my-number" class="h2 fw-bold mb-0 text-dark">
+                        --
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div class="small text-muted mb-1">前面等待</div>
+                      <div class="h2 fw-bold mb-0 text-dark">
+                        <span id="ahead-count">--</span>
+                        <small class="fs-6">人</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-3">
+                  <span
+                    id="status-badge"
+                    class="badge status-badge-lg bg-light text-dark border"
+                  >
+                    尚未取號
+                  </span>
+                </div>
+
+                <div id="counter-area" class="mt-3" style="display: none">
+                  <div
+                    class="alert alert-success border-0 shadow-sm d-flex align-items-center justify-content-center"
+                  >
+                    <i class="fa-solid fa-bell fa-shake me-2"></i>
+                    <div>
+                      請前往：<strong id="counter-name" class="fs-5"></strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  id="qrcode-container"
+                  class="mx-auto flex-column align-items-center justify-content-center"
+                >
+                  <div id="qrcode"></div>
+                  <small class="text-muted mt-2 d-block"
+                    >憑此碼報到 Check-in</small
+                  >
+                </div>
+              </div>
+
+              <div class="mt-4 d-grid gap-2">
+                <button
+                  id="btn-take"
+                  class="btn btn-primary-soft btn-lg shadow-sm"
+                >
+                  <i class="fa-solid fa-ticket me-2"></i> 我要抽號
+                </button>
+
+                <button
+                  id="btn-cancel"
+                  class="btn btn-outline-secondary btn-sm rounded-pill mt-2"
+                  disabled
+                  style="display: none"
+                >
+                  取消排隊
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-center mt-4 d-lg-none">
+            <small class="text-muted">Queue Ticket System © 2024</small>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <script>
+      let currentTicketId = null;
+      let currentService = null;
+      let sseSource = null;
+      let qrCodeObj = null;
+
+      // ------------------------------------------
+      // 1. UI 更新邏輯
+      // ------------------------------------------
+      function setNoTicketUI() {
+        // 注意：這裡不要把 current-number 強制歸零，因為我們可能正在聽 SSE
+        // document.getElementById("current-number").textContent = "--";
+
+        document.getElementById("my-number").textContent = "--";
+        document.getElementById("ahead-count").textContent = "--";
+
+        const statusBadge = document.getElementById("status-badge");
+        statusBadge.textContent = "尚未取號";
+        statusBadge.className =
+          "badge status-badge-lg bg-light text-dark border";
+
+        const btnTake = document.getElementById("btn-take");
+        btnTake.disabled = false;
+        btnTake.innerHTML = '<i class="fa-solid fa-ticket me-2"></i> 我要抽號';
+
+        const btnCancel = document.getElementById("btn-cancel");
+        btnCancel.disabled = true;
+        btnCancel.style.display = "none";
+
+        document
+          .getElementById("qrcode-container")
+          .style.setProperty("display", "none", "important");
+        document.getElementById("counter-area").style.display = "none";
+        document.getElementById("qrcode").innerHTML = "";
+        qrCodeObj = null;
+
+        currentTicketId = null;
+        currentService = null;
+        // 注意：這裡不關閉 SSE，因為我們要持續聽叫號
+      }
+
+      function generateQRCode(text) {
+        const container = document.getElementById("qrcode");
+        if (container.innerHTML.trim() !== "") return;
+
+        const wrapper = document.getElementById("qrcode-container");
+        wrapper.style.setProperty("display", "flex", "important");
+
+        qrCodeObj = new QRCode(container, {
+          text: text,
+          width: 128,
+          height: 128,
+          colorDark: "#2d3748",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H,
+        });
+      }
+
+      function applyStatusToUI(data) {
+        const currentNum = data.current_number ?? 0;
+        const myNum = data.number;
+
+        // 更新數字
+        document.getElementById("current-number").textContent =
+          data.current_number ?? "尚未開始";
+        document.getElementById("my-number").textContent = myNum;
+        document.getElementById("ahead-count").textContent = data.ahead_count;
+
+        // QR Code
+        const ticketUrl = `${window.location.origin}/ticket/${data.ticket_id}/view`;
+        generateQRCode(ticketUrl);
+
+        // 狀態判斷
+        let displayStatus = data.status;
+        if (data.status === "serving" && currentNum > myNum) {
+          displayStatus = "done";
+        }
+
+        const statusBadge = document.getElementById("status-badge");
+        const counterArea = document.getElementById("counter-area");
+        const counterName = document.getElementById("counter-name");
+        const btnTake = document.getElementById("btn-take");
+        const btnCancel = document.getElementById("btn-cancel");
+
+        if (displayStatus === "waiting") {
+          statusBadge.textContent = "排隊中 Waiting";
+          statusBadge.className =
+            "badge status-badge-lg bg-warning text-dark border-0 shadow-sm";
+          btnTake.disabled = true;
+          btnTake.innerHTML =
+            '<i class="fa-solid fa-clock me-2"></i> 已在隊伍中';
+          btnCancel.disabled = false;
+          btnCancel.style.display = "inline-block";
+          counterArea.style.display = "none";
+        } else if (displayStatus === "serving") {
+          statusBadge.textContent = "服務中 Serving";
+          statusBadge.className =
+            "badge status-badge-lg bg-success text-white border-0 shadow-sm animate-pulse";
+          counterArea.style.display = "block";
+          counterName.textContent = data.counter || "櫃台";
+          btnTake.disabled = true;
+          btnTake.textContent = "正在服務您";
+          btnCancel.style.display = "none";
+        } else {
+          statusBadge.textContent = "已過號 / 已取消";
+          statusBadge.className =
+            "badge status-badge-lg bg-secondary text-white border-0";
+          btnTake.disabled = false;
+          btnTake.innerHTML =
+            '<i class="fa-solid fa-rotate-right me-2"></i> 重新抽號';
+          btnCancel.style.display = "none";
+        }
+      }
+
+      async function refreshStatus() {
+        if (!currentTicketId) {
+          // 如果沒有票，就不做詳細查詢，UI 交給 setNoTicketUI 和 SSE 處理
+          return;
+        }
+        try {
+          const res = await fetch(`/ticket/${currentTicketId}/status`);
+          if (!res.ok) {
+            setNoTicketUI();
+            // 就算票失效了，我們還是要聽預設頻道的叫號
+            setupSSE("register");
+            return;
+          }
+          const data = await res.json();
+          applyStatusToUI(data);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      // ------------------------------------------
+      // 2. SSE 連線 (修正版：支援無票收聽)
+      // ------------------------------------------
+      function setupSSE(service) {
+        // 如果已經連線且服務相同，就不用重連
+        if (
+          sseSource &&
+          sseSource.url.includes(service) &&
+          sseSource.readyState !== EventSource.CLOSED
+        ) {
+          return;
+        }
+        if (sseSource) sseSource.close();
+
+        console.log(`Connecting SSE to /events/${service}...`);
+        sseSource = new EventSource(`/events/${service}`);
+
+        sseSource.onmessage = function (event) {
+          const msg = JSON.parse(event.data);
+          // 1. 無論有無票，優先更新「目前叫號」大標題
+          if (msg.number) {
+            document.getElementById("current-number").textContent = msg.number;
+          }
+
+          // 2. 如果使用者有票，才去更新他的詳細狀態 (前面還有幾人等)
+          if (currentTicketId) {
+            refreshStatus();
+          }
+        };
+
+        let retryCount = 0;
+        sseSource.onerror = function (err) {
+          sseSource.close();
+          let timeout = Math.min(1000 * Math.pow(2, retryCount), 10000);
+          retryCount++;
+          setTimeout(() => setupSSE(service), timeout);
+        };
+        sseSource.onopen = function () {
+          retryCount = 0;
+        };
+      }
+
+      // ------------------------------------------
+      // 3. 初始與事件
+      // ------------------------------------------
+      async function init() {
+        try {
+          const res = await fetch("/session/status");
+          const data = await res.json();
+
+          if (data.has_ticket) {
+            // 有票：載入票務資訊 + 連線對應服務
+            currentTicketId = data.ticket_id;
+            currentService = data.service;
+            await refreshStatus();
+            setupSSE(currentService);
+          } else {
+            // ★★★ 沒票：重置介面 + 連線預設服務 ('register') ★★★
+            setNoTicketUI();
+            setupSSE("register");
+          }
+        } catch (err) {
+          setNoTicketUI();
+          // 發生錯誤也要試著連線，讓畫面有東西
+          setupSSE("register");
+        }
+      }
+
+      document
+        .getElementById("btn-take")
+        .addEventListener("click", async () => {
+          const btn = document.getElementById("btn-take");
+          btn.disabled = true;
+          btn.innerHTML =
+            '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> 處理中...';
+
+          try {
+            if (currentTicketId) {
+              await fetch("/session/clear", { method: "POST" });
+              currentTicketId = null;
+              document.getElementById("qrcode").innerHTML = "";
+            }
+
+            const res = await fetch("/session/ticket", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ service: "register" }),
+            });
+
+            if (res.ok || res.status === 400) {
+              const data = await res.json();
+              currentTicketId = data.ticket_id;
+              currentService = data.service || "register";
+              setupSSE(currentService);
+              await refreshStatus();
+            } else {
+              alert("取號失敗");
+              if (!currentTicketId) {
+                setNoTicketUI();
+                setupSSE("register");
+              }
+            }
+          } catch (e) {
+            console.error(e);
+            alert("連線錯誤");
+            if (!currentTicketId) {
+              btn.disabled = false;
+              btn.innerHTML =
+                '<i class="fa-solid fa-ticket me-2"></i> 我要抽號';
+            }
+          }
+        });
+
+      document
+        .getElementById("btn-cancel")
+        .addEventListener("click", async () => {
+          if (!confirm("確定要放棄排隊嗎？")) return;
+          await fetch("/session/cancel", { method: "POST" });
+          setNoTicketUI();
+          setupSSE("register"); // 取消後繼續監聽大廳叫號
+        });
+
+      init();
+    </script>
+  </body>
+</html>
