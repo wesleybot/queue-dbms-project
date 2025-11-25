@@ -1,10 +1,8 @@
 # app.py
-from gevent import monkey
-monkey.patch_all()
-
 import os
 import json
 import threading
+import queue
 import redis
 from flask import (
     Flask, request, jsonify, send_file,
@@ -15,7 +13,7 @@ from datetime import datetime
 import qrcode
 import io
 
-# 引用 queue_core (它已經會自動判斷連線了)
+# 引用 queue_core
 from queue_core import (
     create_ticket, call_next, get_ticket_status,
     get_stats_for_date, cancel_ticket, get_live_queue_stats, r
@@ -26,7 +24,6 @@ from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv
 
-# 載入本地 .env (上雲端後會自動讀取雲端環境變數)
 load_dotenv()
 
 app = Flask(__name__)
@@ -41,12 +38,10 @@ LINE_CHANNEL_ACCESS_TOKEN = channel_token.strip() if channel_token else None
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN) if LINE_CHANNEL_ACCESS_TOKEN else None
 handler = WebhookHandler(LINE_CHANNEL_SECRET) if LINE_CHANNEL_SECRET else None
 
-# ----------------------------------------------------------
-# [修改點] Redis Session 也要支援雲端
-# ----------------------------------------------------------
+# Redis Session 連線 (這個流量很低，維持原樣即可)
 REDIS_URL = os.environ.get("REDIS_URL")
 if REDIS_URL:
-    session_redis = redis.from_url(REDIS_URL) # Session 用，不需要 decode_responses
+    session_redis = redis.from_url(REDIS_URL, ssl_cert_reqs=None)
 else:
     session_redis = redis.Redis(host="localhost", port=6379, db=0)
 
@@ -71,70 +66,115 @@ def clear_line_user_ticket(user_id: str):
     key = f"line_user:{user_id}"
     r.delete(key)
 
-# ----------------------------------------------------------------
-# 背景執行緒：監聽 Redis Pub/Sub
-# ----------------------------------------------------------------
-def monitor_queue_updates():
-    # [修改點] 背景執行緒也要連線到雲端
+# ============================================================
+# 🔥 [核心架構升級] 廣播系統 (Message Announcer)
+# 解決 Redis 連線數爆炸的關鍵：只用 1 個 Redis 連線服務所有人
+# ============================================================
+class MessageAnnouncer:
+    def __init__(self):
+        self.listeners = []
+
+    def listen(self):
+        q = queue.Queue(maxsize=5)
+        self.listeners.append(q)
+        return q
+
+    def announce(self, msg):
+        # 廣播給所有正在聽的 Queue (也就是所有 SSE 連線)
+        # 使用逆向迴圈以便安全移除斷線的 listener
+        for i in reversed(range(len(self.listeners))):
+            try:
+                self.listeners[i].put_nowait(msg)
+            except queue.Full:
+                del self.listeners[i]
+
+# 全域廣播器實例
+announcer = MessageAnnouncer()
+
+# 背景執行緒：監聽 Redis 並轉發給廣播器
+def redis_listener_worker():
+    # 這是「唯一」需要持續連線 Redis 的地方
     if REDIS_URL:
-        pubsub_r = redis.from_url(REDIS_URL, decode_responses=True)
+        pubsub_r = redis.from_url(REDIS_URL, decode_responses=True, ssl_cert_reqs=None)
     else:
         pubsub_r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
         
     pubsub = pubsub_r.pubsub()
     pubsub.psubscribe("channel:queue_update:*")
     
-    print("🟢 [Background] LINE Push Notification Worker Started...", flush=True)
+    print("🟢 [System] Global Redis Listener Started (Multiplexing Mode)", flush=True)
 
     for message in pubsub.listen():
         if message["type"] == "pmessage":
+            data_str = message["data"]
+            # 1. 轉發給廣播器 (服務網頁 SSE)
+            # 格式化為 SSE 需要的字串
+            sse_msg = f"data: {data_str}\n\n"
+            announcer.announce(sse_msg)
+            
+            # 2. 處理 LINE 推播 (服務 LINE 使用者)
             try:
-                data_str = message["data"]
                 ticket_data = json.loads(data_str)
-                
-                ticket_id = ticket_data["ticket_id"]
-                number = ticket_data["number"]
-                counter = ticket_data["counter"]
-                
-                # 去重鎖
-                dedup_key = f"dedup:push:{ticket_id}:{number}"
-                is_first_handler = pubsub_r.set(dedup_key, "1", ex=60, nx=True)
-                
-                if not is_first_handler:
-                    continue
-
-                ticket_detail = r.hgetall(f"ticket:{ticket_id}")
-                line_user_id = ticket_detail.get("line_user_id")
-
-                if line_user_id and line_bot_api:
-                    print(f"🔔 [Push] Sending to {line_user_id} for Ticket #{number}", flush=True)
-                    push_text = (
-                        f"📢 號碼到囉！\n\n"
-                        f"您的號碼：{number}\n"
-                        f"請前往：{counter}\n"
-                        f"請準備好您的手機畫面，盡速前往櫃台辦理。"
-                    )
-                    try:
-                        line_bot_api.push_message(line_user_id, TextSendMessage(text=push_text))
-                    except LineBotApiError as e:
-                        print(f"🔴 Push failed: {e}", flush=True)
+                handle_push_notification(ticket_data, pubsub_r)
             except Exception as e:
-                print(f"🔴 Error processing pubsub message: {e}", flush=True)
+                print(f"🔴 Push Error: {e}", flush=True)
 
-# 啟動背景執行緒
-is_monitor_running = False
-for t in threading.enumerate():
-    if t.name == "QueueMonitorThread":
-        is_monitor_running = True
-        break
+def handle_push_notification(ticket_data, redis_conn):
+    # 獨立出來的推播邏輯
+    ticket_id = ticket_data["ticket_id"]
+    number = ticket_data["number"]
+    counter = ticket_data["counter"]
+    
+    # 去重鎖
+    dedup_key = f"dedup:push:{ticket_id}:{number}"
+    is_first_handler = redis_conn.set(dedup_key, "1", ex=60, nx=True)
+    
+    if not is_first_handler:
+        return
 
-if not is_monitor_running:
-    monitor_thread = threading.Thread(target=monitor_queue_updates, daemon=True, name="QueueMonitorThread")
-    monitor_thread.start()
-    print("🚀 Monitor Thread Launched by Gunicorn!", flush=True)
+    ticket_detail = r.hgetall(f"ticket:{ticket_id}")
+    line_user_id = ticket_detail.get("line_user_id")
 
+    if line_user_id and line_bot_api:
+        print(f"🔔 [Push] Sending to {line_user_id}", flush=True)
+        push_text = f"📢 號碼到囉！\n\n您的號碼：{number}\n請前往：{counter}\n請準備好您的手機畫面，盡速前往櫃台辦理。"
+        try:
+            line_bot_api.push_message(line_user_id, TextSendMessage(text=push_text))
+        except LineBotApiError as e:
+            print(f"🔴 Push failed: {e}", flush=True)
 
-# ------------------ LINE Webhook ------------------
+# 啟動全域監聽執行緒
+if not any(t.name == "GlobalRedisListener" for t in threading.enumerate()):
+    t = threading.Thread(target=redis_listener_worker, daemon=True, name="GlobalRedisListener")
+    t.start()
+
+# ============================================================
+# SSE 路由 (現在改成聽廣播器，不再直連 Redis)
+# ============================================================
+@app.route("/events/<service>")
+def events(service):
+    def stream():
+        # 1. 每個使用者連進來，先給他一個記憶體 Queue (不消耗 Redis)
+        messages = announcer.listen()
+        
+        # 2. 發送初始狀態 (Initial State) - 這裡還是要讀一次 Redis，但只是一次性的 get
+        try:
+            current_num = r.get(f"current_number:{service}")
+            if current_num:
+                init_data = json.dumps({"ticket_id": 0, "number": int(current_num), "service": service, "counter": "", "status": "update"})
+                yield f"data: {init_data}\n\n"
+        except:
+            pass
+
+        # 3. 進入無窮迴圈，等待廣播器的消息
+        while True:
+            msg = messages.get()  # 這裡會 Block 住，直到廣播器有消息
+            yield msg
+
+    return Response(stream(), mimetype="text/event-stream")
+
+# ------------------ 以下保持不變 (Webhook, Session, API) ------------------
+
 @app.route("/line/webhook", methods=["POST"])
 def line_webhook():
     if not handler or not line_bot_api:
@@ -161,7 +201,6 @@ def handle_line_message(event):
                 current_num = status.get("current_number") or 0
                 my_num = status["number"]
                 is_passed = (status["status"] == "serving" and current_num > my_num)
-
                 if status["status"] == "waiting":
                     is_actually_waiting = True
                 elif status["status"] == "serving" and not is_passed:
@@ -226,7 +265,6 @@ def handle_line_message(event):
     else:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入：我要抽號、查詢、或取消。"))
 
-# ------------------ Route ------------------
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
@@ -257,18 +295,14 @@ def admin_logout():
 def ticket_view(ticket_id):
     status = get_ticket_status(ticket_id)
     if not status: return render_template("ticket_forbidden.html"), 404
-
     session_ticket = session.get("ticket_id")
     if session_ticket and int(session_ticket) != ticket_id:
         return render_template("ticket_forbidden.html")
-
     current_num = status.get("current_number") or 0
     my_num = status["number"]
     is_passed = (status["status"] == "serving" and current_num > my_num)
-    
     if status["status"] in ["done", "cancelled"] or is_passed:
         return render_template("ticket_expired.html", number=my_num, status=status["status"])
-
     return render_template("ticket_view.html", ticket_id=ticket_id, service=status["service"])
 
 @app.route("/counter/<service>/next", methods=["POST"])
@@ -294,29 +328,6 @@ def admin_stats_today_summary():
     total_count = sum(row["count"] for row in service_rows)
     overall_avg = sum(row["avg_wait_seconds"] * row["count"] for row in service_rows) / total_count if total_count else 0
     return jsonify({"date": today_str, "total_count": total_count, "overall_avg_wait_seconds": overall_avg, "services": service_rows})
-
-@app.route("/events/<service>")
-def events(service):
-    def generate():
-        current_num = r.get(f"current_number:{service}")
-        if current_num:
-            init_data = json.dumps({"ticket_id": 0, "number": int(current_num), "service": service, "counter": "", "status": "update"})
-            yield f"data: {init_data}\n\n"
-        
-        # [修改點] 這裡也要支援雲端連線
-        if REDIS_URL:
-            sse_r = redis.from_url(REDIS_URL, decode_responses=True)
-        else:
-            sse_r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
-            
-        pubsub = sse_r.pubsub()
-        channel = f"channel:queue_update:{service}"
-        pubsub.subscribe(channel)
-        
-        for message in pubsub.listen():
-            if message["type"] == "message":
-                yield f"data: {message['data']}\n\n"
-    return Response(generate(), mimetype="text/event-stream")
 
 @app.route("/session/status", methods=["GET"])
 def session_status():
