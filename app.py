@@ -1,4 +1,7 @@
 # app.py
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import json
 import threading
