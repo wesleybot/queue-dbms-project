@@ -165,7 +165,6 @@ def get_ticket_status(ticket_id: int) -> dict | None:
             
             ahead_count = res[0]
         except Exception as e:
-            # [修正點] 如果查詢失敗，將 ahead_count 設為 0
             print("Search error:", e)
             ahead_count = 0 
             
@@ -234,7 +233,7 @@ def get_live_queue_stats() -> list[dict]:
         return []
 
 # ---------------------------------------------------------
-# get_overall_summary: 取得總體系統數據 (Total Issued, Live Count, Avg Time)
+# get_overall_summary: 取得總體系統數據 (已修復解析錯誤)
 # ---------------------------------------------------------
 def get_overall_summary() -> dict:
     try:
@@ -247,13 +246,21 @@ def get_overall_summary() -> dict:
         
         counts = {"waiting": 0, "serving": 0, "cancelled": 0, "done": 0}
         
-        # 解析聚合結果
+        # ★★★ 修復解析邏輯：安全解析 FT.AGGREGATE 輸出結構 ★★★
         if raw and raw[0] > 0:
-            for i in range(1, len(raw), 2):
-                status_raw = raw[i][1]
-                count = int(raw[i+1][1])
-                counts[status_raw] = count
+            for i in range(1, len(raw)): # 迭代每個群組
+                group = raw[i] # group = ['@status', 'waiting', 'count', '5']
+                group_data = {}
                 
+                for j in range(0, len(group), 2): # 迭代群組內的鍵值對
+                    group_data[group[j]] = group[j+1]
+
+                status_key = group_data.get('@status')
+                count_value = int(group_data.get('count', 0))
+
+                if status_key:
+                    counts[status_key] = count_value
+        
         # 2. 讀取總發出票數 (用計數器)
         total_issued = int(r.get("ticket:global:id") or 0)
         
@@ -273,25 +280,25 @@ def get_overall_summary() -> dict:
             "total_cancelled": counts["cancelled"],
             "total_served_today": total_served_today,
             "avg_wait_time_today": avg_wait_time_sec,
+            "error": None # 成功返回 None
         }
     except redis.exceptions.ResponseError as e:
-        print(f"🔴 ERROR: RediSearch overall summary failed. Error: {e}")
+        # RediSearch 模組未載入或索引丟失
         return {
-            "error": "RediSearch Index Missing",
+            "error": f"RediSearch Index Missing or Module Not Loaded: {str(e)}",
             "total_issued": int(r.get("ticket:global:id") or 0),
-            "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0
+            "live_waiting": "N/A", "live_serving": "N/A", "total_served_today": 0, "avg_wait_time_today": 0
         }
     except Exception as e:
-        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
-        return {"error": "Unknown backend error", "total_issued": 0, "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0}
+        # 其他錯誤 (例如 Hash 讀取失敗)
+        return {"error": f"Unknown Error: {str(e)}", "total_issued": 0, "live_waiting": "N/A", "live_serving": "N/A", "total_served_today": 0, "avg_wait_time_today": 0}
 
 # ---------------------------------------------------------
-# get_hourly_demand: 取得時段熱度分析 (Advanced Aggregation)
+# get_hourly_demand: 取得時段熱度分析 (已修復解析錯誤)
 # ---------------------------------------------------------
 def get_hourly_demand() -> list[dict]:
     try:
         # 計算時間 (GMT+8)
-        # FT.AGGREGATE 將 Unix Timestamp 轉換成 0-23 的小時數，並聚合計算每個小時的總抽號數量
         raw = r.execute_command(
             "FT.AGGREGATE", "idx:ticket", "*", 
             "APPLY", "FLOOR((@created_at / 3600) % 24)", "AS", "hour", 
@@ -304,16 +311,19 @@ def get_hourly_demand() -> list[dict]:
         if raw and raw[0] > 0:
             for i in range(1, len(raw)):
                 row = raw[i]
-                hour = int(row[1])
-                count = int(row[3])
+                group_data = {}
+                for j in range(0, len(row), 2):
+                    group_data[row[j]] = row[j+1]
+                
                 hourly_data.append({
-                    "hour": hour,
-                    "count": count
+                    "hour": int(group_data.get('@hour')),
+                    "count": int(group_data.get('total'))
                 })
+
         return hourly_data
     except redis.exceptions.ResponseError as e:
         print(f"🔴 ERROR: RediSearch hourly demand failed. Error: {e}")
-        return []
+        return {"error": "RediSearch Module Failure"}
     except Exception as e:
         print(f"🔴 ERROR: Unknown error in hourly demand. Error: {e}")
-        return []
+        return {"error": "Unknown backend error"}
