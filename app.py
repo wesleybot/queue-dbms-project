@@ -4,6 +4,7 @@ import json
 import threading
 import queue
 import redis
+import uuid # [新增] 為了在 app.py 這端也能補救 Token
 from flask import (
     Flask, request, jsonify, send_file,
     url_for, Response, render_template, session, redirect, abort
@@ -152,7 +153,7 @@ if not any(t.name == "GlobalRedisListener" for t in threading.enumerate()):
     t.start()
 
 # ============================================================
-# SSE 路由 (這就是你 404 缺少的部分！)
+# SSE 路由
 # ============================================================
 @app.route("/events/<service>")
 def events(service):
@@ -218,8 +219,17 @@ def handle_line_message(event):
             ticket = create_ticket("register", line_user_id=user_id)
             bind_line_user_to_ticket(user_id, ticket["ticket_id"], ticket["service"])
             
+            # [關鍵修正] 防呆處理：如果 ticket 字典裡沒有 token，我們現場補救一個
+            # 這樣就算 queue_core.py 沒更新成功，這裡也不會報錯
+            ticket_token = ticket.get('token')
+            if not ticket_token:
+                ticket_token = str(uuid.uuid4()) # 補救措施
+                print(f"⚠️ Warning: Token missing in create_ticket response. Generated fallback: {ticket_token}")
+                # 嘗試補寫回 Redis (非必要，但保險)
+                r.hset(f"ticket:{ticket['ticket_id']}", "token", ticket_token)
+            
             # 使用統一網址 + Token
-            view_url = f"{BASE_URL}/ticket/{ticket['ticket_id']}/view?token={ticket['token']}"
+            view_url = f"{BASE_URL}/ticket/{ticket['ticket_id']}/view?token={ticket_token}"
             msg = f"🎉 取號成功！\n號碼：{ticket['number']}\n\n線上進度：\n{view_url}"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
 
