@@ -260,7 +260,6 @@
             document.getElementById("live-cancelled").textContent = "N/A";
           } else {
             hideError("live-error");
-            // 更新 4 個狀態欄位
             document.getElementById("live-waiting").textContent =
               summaryData.live_waiting;
             document.getElementById("live-serving").textContent =
@@ -272,15 +271,25 @@
           }
 
           document.getElementById("total-issued").textContent =
-            summaryData.total_issued;
+            summaryData.total_issued || 0;
           document.getElementById("total-served-today").textContent =
-            summaryData.total_served_today;
+            summaryData.total_served_today || 0;
 
+          // [關鍵修正] 嚴格檢查 avgTime 是否為有效數字
           const avgTime = summaryData.avg_wait_time_today;
-          document.getElementById("avg-wait-time-today").textContent =
-            avgTime !== 0 && avgTime !== "N/A"
-              ? avgTime.toFixed(1) + " 秒"
-              : "-- 秒";
+
+          // 判斷邏輯：不是 undefined, 不是 null, 且是數字型態 (Number)
+          if (
+            avgTime !== undefined &&
+            avgTime !== null &&
+            typeof avgTime === "number"
+          ) {
+            document.getElementById("avg-wait-time-today").textContent =
+              avgTime.toFixed(1) + " 秒";
+          } else {
+            document.getElementById("avg-wait-time-today").textContent =
+              "-- 秒";
+          }
 
           document.getElementById("live-stats-time").textContent =
             new Date().toLocaleTimeString();
@@ -298,8 +307,10 @@
           const demandData = await demandRes.json();
 
           if (demandData.error || demandData.length === 0) {
-            displayError("demand-error", demandData.error || "");
-            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">無數據</td></tr>`;
+            // 這裡不顯示紅字錯誤，改為顯示柔和的提示
+            // displayError('demand-error', demandData.error || '');
+            hideError("demand-error"); // 隱藏錯誤框
+            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">目前無時段數據</td></tr>`;
             return;
           }
 
@@ -345,8 +356,11 @@
             console.error(err);
             pre.textContent = "叫號失敗";
           }
-          loadSummaryData();
-          loadHourlyDemand();
+          // 稍微延遲一下再刷新，等待後端寫入完成
+          setTimeout(() => {
+            loadSummaryData();
+            loadHourlyDemand();
+          }, 500);
         });
 
       function initializeDashboard() {
