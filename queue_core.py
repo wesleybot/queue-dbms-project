@@ -232,34 +232,23 @@ def get_live_queue_stats() -> list[dict]:
         print(f"🔴 ERROR: Unknown error during FT.AGGREGATE. Error: {e}")
         return []
 
-# ---------------------------------------------------------
-# get_overall_summary: 取得總體系統數據 (已修復解析錯誤)
-# ---------------------------------------------------------
+# queue_core.py 裡的 get_overall_summary 函式 (請覆蓋舊的)
+
 def get_overall_summary() -> dict:
     try:
-        # 1. 計算所有票的狀態分佈 (Live Aggregation)
-        raw = r.execute_command(
-            "FT.AGGREGATE", "idx:ticket", "*",
-            "GROUPBY", 1, "@status",
-            "REDUCE", "COUNT", 0, "AS", "count"
-        )
-        
-        counts = {"waiting": 0, "serving": 0, "cancelled": 0, "done": 0}
-        
-        # ★★★ 修復解析邏輯：安全解析 FT.AGGREGATE 輸出結構 ★★★
-        if raw and raw[0] > 0:
-            for i in range(1, len(raw)):
-                group = raw[i]
-                group_data = {}
-                for j in range(0, len(group), 2):
-                    group_data[group[j]] = group[j+1]
+        # 1. 改用 FT.SEARCH 直接計算數量 (比 Aggregate 更穩定)
+        # 查詢 "waiting" 狀態的總數 (LIMIT 0 0 代表只取數量，不取內容，速度極快)
+        res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
+        count_waiting = res_waiting[0] if res_waiting else 0
 
-                status_key = group_data.get('@status')
-                count_value = int(group_data.get('count', 0))
+        # 查詢 "serving" 狀態的總數
+        res_serving = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{serving}", "LIMIT", "0", "0")
+        count_serving = res_serving[0] if res_serving else 0
 
-                if status_key:
-                    counts[status_key] = count_value
-        
+        # 查詢 "cancelled" 狀態的總數 (選用)
+        res_cancelled = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{cancelled}", "LIMIT", "0", "0")
+        count_cancelled = res_cancelled[0] if res_cancelled else 0
+
         # 2. 讀取總發出票數 (用計數器)
         total_issued = int(r.get("ticket:global:id") or 0)
         
@@ -274,22 +263,24 @@ def get_overall_summary() -> dict:
 
         return {
             "total_issued": total_issued,
-            "live_waiting": counts["waiting"],
-            "live_serving": counts["serving"],
-            "total_cancelled": counts["cancelled"],
+            "live_waiting": count_waiting,
+            "live_serving": count_serving,
+            "total_cancelled": count_cancelled,
             "total_served_today": total_served_today,
             "avg_wait_time_today": avg_wait_time_sec,
             "error": None
         }
     except redis.exceptions.ResponseError as e:
+        print(f"🔴 ERROR: RediSearch SEARCH failed. Error: {e}")
+        # 如果搜尋失敗，回傳 0 而不是錯誤，讓介面保持顯示
         return {
-            "error": f"RediSearch Index Missing or Module Not Loaded: {str(e)}",
+            "error": f"Search Error: {str(e)}",
             "total_issued": int(r.get("ticket:global:id") or 0),
-            "live_waiting": "N/A", "live_serving": "N/A", "total_served_today": 0, "avg_wait_time_today": 0
+            "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0
         }
     except Exception as e:
-        return {"error": f"Unknown Error: {str(e)}", "total_issued": 0, "live_waiting": "N/A", "live_serving": "N/A", "total_served_today": 0, "avg_wait_time_today": 0}
-
+        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
+        return {"error": f"Unknown: {str(e)}", "total_issued": 0, "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0}
 # ---------------------------------------------------------
 # get_hourly_demand: 取得時段熱度分析 (已修復解析錯誤)
 # ---------------------------------------------------------
