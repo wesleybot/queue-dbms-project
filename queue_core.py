@@ -232,9 +232,65 @@ def get_live_queue_stats() -> list[dict]:
         print(f"🔴 ERROR: Unknown error during FT.AGGREGATE. Error: {e}")
         return []
 
-# queue_core.py 裡的 get_overall_summary 函式 (請覆蓋舊的)
+# queue_core.py (只修改 get_overall_summary 部分)
 
+# ---------------------------------------------------------
+# get_overall_summary: 取得總體系統數據 (含 Waiting, Serving, Done, Cancelled)
+# ---------------------------------------------------------
 def get_overall_summary() -> dict:
+    try:
+        # 1. 使用 FT.SEARCH 分別計算四種狀態的數量
+        # 等待中
+        res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
+        count_waiting = res_waiting[0] if res_waiting else 0
+
+        # 服務中
+        res_serving = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{serving}", "LIMIT", "0", "0")
+        count_serving = res_serving[0] if res_serving else 0
+
+        # [新增] 已完成/過號 (status=done)
+        res_done = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{done}", "LIMIT", "0", "0")
+        count_done = res_done[0] if res_done else 0
+
+        # [新增] 已取消 (status=cancelled)
+        res_cancelled = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{cancelled}", "LIMIT", "0", "0")
+        count_cancelled = res_cancelled[0] if res_cancelled else 0
+
+        # 2. 讀取總發出票數
+        total_issued = int(r.get("ticket:global:id") or 0)
+        
+        # 3. 讀取今日服務統計 (Hash)
+        today_str = datetime.now().strftime("%Y%m%d")
+        total_served_today_data = r.hgetall(f"stats:{today_str}:register:ALL")
+        
+        total_served_today = int(total_served_today_data.get("count", 0) or 0)
+        total_wait_time = int(total_served_today_data.get("total_wait", 0) or 0)
+        
+        avg_wait_time_sec = total_wait_time / total_served_today if total_served_today > 0 else 0
+
+        return {
+            "total_issued": total_issued,
+            "live_waiting": count_waiting,
+            "live_serving": count_serving,
+            "live_done": count_done,           # 新增回傳
+            "live_cancelled": count_cancelled, # 新增回傳
+            "total_served_today": total_served_today,
+            "avg_wait_time_today": avg_wait_time_sec,
+            "error": None
+        }
+    except redis.exceptions.ResponseError as e:
+        # 發生錯誤時的預設回傳
+        return {
+            "error": f"RediSearch Error: {str(e)}",
+            "total_issued": int(r.get("ticket:global:id") or 0),
+            "live_waiting": 0, "live_serving": 0, "live_done": 0, "live_cancelled": 0,
+            "total_served_today": 0, "avg_wait_time_today": 0
+        }
+    except Exception as e:
+        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
+        return {"error": f"Unknown: {str(e)}", "total_issued": 0}
+
+
     try:
         # 1. 改用 FT.SEARCH 直接計算數量 (比 Aggregate 更穩定)
         # 查詢 "waiting" 狀態的總數 (LIMIT 0 0 代表只取數量，不取內容，速度極快)

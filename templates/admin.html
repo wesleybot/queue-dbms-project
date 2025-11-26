@@ -128,8 +128,8 @@
             <div class="col-md-6">
               <div class="card shadow-sm h-100">
                 <div class="card-header">
-                  <i class="fa-solid fa-list-check me-2"></i>即時排隊狀態 (Live
-                  RediSearch Aggregation)
+                  <i class="fa-solid fa-list-check me-2"></i>即時排隊狀態
+                  (RediSearch)
                   <span
                     class="badge bg-secondary float-end"
                     id="live-stats-time"
@@ -137,10 +137,9 @@
                   >
                 </div>
                 <div class="card-body">
-                  <p class="text-muted small">
-                    即時統計目前仍在隊伍中 (Waiting/Serving) 的人數。
-                  </p>
-                  <div class="row text-center my-3">
+                  <p class="text-muted small">即時統計各狀態的人數。</p>
+
+                  <div class="row text-center mb-3">
                     <div class="col-6 border-end">
                       <div class="small text-muted">等待中 Waiting</div>
                       <div
@@ -160,6 +159,30 @@
                       </div>
                     </div>
                   </div>
+
+                  <hr class="my-2 text-muted" style="opacity: 0.2" />
+
+                  <div class="row text-center mt-3">
+                    <div class="col-6 border-end">
+                      <div class="small text-muted">已服務/過號 Done</div>
+                      <div
+                        id="live-done"
+                        class="dashboard-value text-secondary"
+                      >
+                        --
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div class="small text-muted">取消抽號 Cancelled</div>
+                      <div
+                        id="live-cancelled"
+                        class="dashboard-value text-muted"
+                      >
+                        --
+                      </div>
+                    </div>
+                  </div>
+
                   <div
                     class="alert alert-danger p-2 small mt-2"
                     id="live-error"
@@ -173,13 +196,10 @@
               <div class="card shadow-sm h-100">
                 <div class="card-header">
                   <i class="fa-solid fa-chart-bar me-2"></i>時段熱度分析 (Hourly
-                  Demand - FT.AGGREGATE)
+                  Demand)
                 </div>
                 <div class="card-body">
-                  <p class="text-muted small">
-                    基於抽號時間 (created_at)
-                    統計各時段的需求量，用於人員配置分析。
-                  </p>
+                  <p class="text-muted small">基於抽號時間統計各時段需求。</p>
                   <table class="table table-sm table-striped mt-3">
                     <thead>
                       <tr>
@@ -209,26 +229,16 @@
     </main>
 
     <script>
-      // 核心 API 連結
       const API_CALL_NEXT = "/counter/register/next";
       const API_SUMMARY = "/admin/api/summary";
       const API_DEMAND = "/admin/api/demand";
 
-      // --- 錯誤處理輔助 (已加入 NULL CHECK) ---
       function displayError(elementId, message) {
         const el = document.getElementById(elementId);
-        if (!el) {
-          // 👈 關鍵修復：檢查元素是否存在
-          console.error(
-            "Could not find element ID:",
-            elementId,
-            "in displayError call."
-          );
-          return;
+        if (el) {
+          el.style.display = "block";
+          el.textContent = message;
         }
-        el.style.display = "block";
-        el.textContent = message;
-        el.className = "alert alert-danger p-2 small mt-2";
       }
 
       function hideError(elementId) {
@@ -236,44 +246,36 @@
         if (el) el.style.display = "none";
       }
 
-      // --- 1. 數據載入 ---
       async function loadSummaryData() {
         try {
           const summaryRes = await fetch(API_SUMMARY);
-
-          if (!summaryRes.ok) {
-            // 如果伺服器返回 500，拋出錯誤，讓 catch 處理
-            throw new Error(
-              "Server returned HTTP " +
-                summaryRes.status +
-                " (Please check server logs)"
-            );
-          }
-
+          if (!summaryRes.ok) throw new Error("Server Error");
           const summaryData = await summaryRes.json();
 
-          // 容錯處理：如果後端回傳了 error 旗標 (表示 RediSearch 失敗)
           if (summaryData.error) {
             displayError("live-error", summaryData.error);
-
             document.getElementById("live-waiting").textContent = "N/A";
             document.getElementById("live-serving").textContent = "N/A";
+            document.getElementById("live-done").textContent = "N/A";
+            document.getElementById("live-cancelled").textContent = "N/A";
           } else {
             hideError("live-error");
-            // RediSearch 依賴的數據
+            // 更新 4 個狀態欄位
             document.getElementById("live-waiting").textContent =
               summaryData.live_waiting;
             document.getElementById("live-serving").textContent =
               summaryData.live_serving;
+            document.getElementById("live-done").textContent =
+              summaryData.live_done;
+            document.getElementById("live-cancelled").textContent =
+              summaryData.live_cancelled;
           }
 
-          // 總體數據 (這些數據應該永遠可用)
           document.getElementById("total-issued").textContent =
             summaryData.total_issued;
           document.getElementById("total-served-today").textContent =
             summaryData.total_served_today;
 
-          // Avg wait time formatting
           const avgTime = summaryData.avg_wait_time_today;
           document.getElementById("avg-wait-time-today").textContent =
             avgTime !== 0 && avgTime !== "N/A"
@@ -283,42 +285,26 @@
           document.getElementById("live-stats-time").textContent =
             new Date().toLocaleTimeString();
         } catch (e) {
-          console.error("Failed to load summary data (CRASH):", e);
-          // 顯示嚴重連線錯誤，並清空數據
-          displayError("live-error", "嚴重連線錯誤: " + e.message);
-          document.getElementById("total-issued").textContent = "--";
-          document.getElementById("total-served-today").textContent = "--";
-          document.getElementById("live-waiting").textContent = "--";
-          document.getElementById("live-serving").textContent = "--";
+          console.error(e);
+          displayError("live-error", "連線失敗");
         }
       }
 
       async function loadHourlyDemand() {
         const tbody = document.getElementById("hourly-demand-body");
-        tbody.innerHTML =
-          '<tr><td colspan="2" class="text-center text-muted">載入中...</td></tr>';
-
         try {
           const demandRes = await fetch(API_DEMAND);
-
-          if (!demandRes.ok) {
-            throw new Error("Server returned HTTP " + demandRes.status);
-          }
-
+          if (!demandRes.ok) throw new Error("Server Error");
           const demandData = await demandRes.json();
 
           if (demandData.error || demandData.length === 0) {
-            displayError(
-              "demand-error",
-              demandData.error || "無抽號數據，請確保 RediSearch 啟用。"
-            );
-            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">無可用數據</td></tr>`;
+            displayError("demand-error", demandData.error || "");
+            tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">無數據</td></tr>`;
             return;
           }
 
           hideError("demand-error");
-          tbody.innerHTML = ""; // 清空載入中
-
+          tbody.innerHTML = "";
           demandData.forEach((item) => {
             const tr = document.createElement("tr");
             const hourLabel = item.hour.toString().padStart(2, "0") + ":00";
@@ -326,16 +312,11 @@
             tbody.appendChild(tr);
           });
         } catch (e) {
-          console.error("Failed to load hourly demand:", e);
-          displayError(
-            "demand-error",
-            "網絡連線或數據載入失敗 (" + e.message + ")"
-          );
-          tbody.innerHTML = `<tr><td colspan="2" class="text-center text-danger">載入失敗</td></tr>`;
+          console.error(e);
+          displayError("demand-error", "載入失敗");
         }
       }
 
-      // --- 2. 控制台事件 ---
       document
         .getElementById("btn-call-next")
         .addEventListener("click", async () => {
@@ -352,34 +333,22 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ counter: counter, service: service }),
             });
-
-            if (!res.ok) {
-              throw new Error(
-                "HTTP " + res.status + ". Check Server Log for details."
-              );
-            }
-
+            if (!res.ok) throw new Error("HTTP " + res.status);
             const data = await res.json();
 
             if (data.message === "no one in queue") {
               pre.textContent = `目前 ${service} 沒有人在排隊。`;
             } else {
-              pre.textContent =
-                `叫到號碼：${data.number}\n` +
-                `ticket_id：${data.ticket_id}\n` +
-                `櫃台 counter：${data.counter}\n` +
-                `叫號時間 (Unix)：${data.called_at}`;
+              pre.textContent = `叫到：${data.number} (櫃台 ${data.counter})`;
             }
           } catch (err) {
-            console.error("叫號失敗:", err);
-            pre.textContent = "叫號時發生嚴重錯誤，請檢查伺服器連線。";
+            console.error(err);
+            pre.textContent = "叫號失敗";
           }
-
           loadSummaryData();
           loadHourlyDemand();
         });
 
-      // --- 3. 初始化與自動刷新 ---
       function initializeDashboard() {
         loadSummaryData();
         loadHourlyDemand();
@@ -387,7 +356,6 @@
         setInterval(loadHourlyDemand, 30000);
       }
 
-      // 啟動儀表板
       initializeDashboard();
     </script>
   </body>
