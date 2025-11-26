@@ -40,7 +40,7 @@
       <div class="container-fluid">
         <a class="navbar-brand" href="/">Queue Ticket System 管理儀表板</a>
         <div class="d-flex align-items-center gap-2">
-          <span class="text-light small">櫃台：{{ admin_name }}</span>
+          <span class="text-light small">櫃台：admin</span>
           <a href="/admin/logout" class="btn btn-outline-light btn-sm">登出</a>
         </div>
       </div>
@@ -160,6 +160,11 @@
                       </div>
                     </div>
                   </div>
+                  <div
+                    class="alert alert-danger p-2 small mt-2"
+                    id="live-error"
+                    style="display: none"
+                  ></div>
                 </div>
               </div>
             </div>
@@ -190,6 +195,11 @@
                       </tr>
                     </tbody>
                   </table>
+                  <div
+                    class="alert alert-danger p-2 small mt-2"
+                    id="demand-error"
+                    style="display: none"
+                  ></div>
                 </div>
               </div>
             </div>
@@ -204,14 +214,21 @@
       const API_SUMMARY = "/admin/api/summary";
       const API_DEMAND = "/admin/api/demand";
 
-      // 錯誤顯示輔助
+      // --- 錯誤處理輔助 (已加入 NULL CHECK) ---
       function displayError(elementId, message) {
         const el = document.getElementById(elementId);
-        if (!el.classList.contains("alert-danger")) {
-          el.className = "alert alert-danger p-2 small mt-2";
+        if (!el) {
+          // 👈 關鍵修復：檢查元素是否存在
+          console.error(
+            "Could not find element ID:",
+            elementId,
+            "in displayError call."
+          );
+          return;
         }
-        el.textContent = message;
         el.style.display = "block";
+        el.textContent = message;
+        el.className = "alert alert-danger p-2 small mt-2";
       }
 
       function hideError(elementId) {
@@ -225,11 +242,11 @@
           const summaryRes = await fetch(API_SUMMARY);
 
           if (!summaryRes.ok) {
-            // 如果伺服器返回 500，我們無法解析 JSON，因此拋出一個錯誤
+            // 如果伺服器返回 500，拋出錯誤，讓 catch 處理
             throw new Error(
               "Server returned HTTP " +
                 summaryRes.status +
-                " (Data likely not JSON)"
+                " (Please check server logs)"
             );
           }
 
@@ -237,8 +254,7 @@
 
           // 容錯處理：如果後端回傳了 error 旗標 (表示 RediSearch 失敗)
           if (summaryData.error) {
-            // 顯示 RediSearch 錯誤訊息，但嘗試顯示其他可用數據
-            displayError("live-error", "RediSearch 失敗，請檢查索引。");
+            displayError("live-error", summaryData.error);
 
             document.getElementById("live-waiting").textContent = "N/A";
             document.getElementById("live-serving").textContent = "N/A";
@@ -251,7 +267,7 @@
               summaryData.live_serving;
           }
 
-          // 總體數據 (這些數據依賴簡單的 Hash/Counter，應該永遠可用)
+          // 總體數據 (這些數據應該永遠可用)
           document.getElementById("total-issued").textContent =
             summaryData.total_issued;
           document.getElementById("total-served-today").textContent =
@@ -267,19 +283,13 @@
           document.getElementById("live-stats-time").textContent =
             new Date().toLocaleTimeString();
         } catch (e) {
-          // 捕捉網路錯誤、500錯誤(非JSON)
           console.error("Failed to load summary data (CRASH):", e);
-          displayError(
-            "live-error",
-            "嚴重連線錯誤，後端服務中斷。請檢查 Render Log。"
-          );
-          // 將 RediSearch 相關欄位清空
-          document.getElementById("live-waiting").textContent = "--";
-          document.getElementById("live-serving").textContent = "--";
-
-          // 確保簡單數據不顯示錯誤
+          // 顯示嚴重連線錯誤，並清空數據
+          displayError("live-error", "嚴重連線錯誤: " + e.message);
           document.getElementById("total-issued").textContent = "--";
           document.getElementById("total-served-today").textContent = "--";
+          document.getElementById("live-waiting").textContent = "--";
+          document.getElementById("live-serving").textContent = "--";
         }
       }
 
@@ -307,6 +317,7 @@
           }
 
           hideError("demand-error");
+          tbody.innerHTML = ""; // 清空載入中
 
           demandData.forEach((item) => {
             const tr = document.createElement("tr");
