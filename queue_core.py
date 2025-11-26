@@ -11,7 +11,7 @@ from datetime import datetime
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
-    # 雲端模式：使用 ConnectionPool
+    # 雲端模式
     pool = redis.ConnectionPool.from_url(
         REDIS_URL, 
         decode_responses=True, 
@@ -33,7 +33,7 @@ except Exception as e:
     print(f"Index creation skipped or failed: {e}")
 
 # ---------------------------------------------------------
-# create_ticket: 創建票券並寫入 Stream
+# create_ticket
 # ---------------------------------------------------------
 def create_ticket(service: str, line_user_id: str = "") -> dict:
     pipe = r.pipeline()
@@ -66,7 +66,7 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
     }
 
 # ---------------------------------------------------------
-# call_next: 叫號，讀取 Stream，並發出 Pub/Sub
+# [關鍵修正] call_next: 自動跳過已取消的號碼
 # ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
     stream_key = f"queue_stream:{service}"
@@ -78,64 +78,75 @@ def call_next(service: str, counter_name: str) -> dict | None:
     except redis.exceptions.ResponseError:
         pass
 
-    messages = r.xreadgroup(group_name, consumer_name, {stream_key: ">"}, count=1)
+    # 使用迴圈，直到找到有效的 waiting 票券或隊伍為空
+    while True:
+        messages = r.xreadgroup(group_name, consumer_name, {stream_key: ">"}, count=1)
 
-    if not messages:
-        return None
-    
-    stream_data = messages[0][1]  
-    if not stream_data:
-        return None
+        if not messages:
+            return None # 隊伍真的沒人了
+        
+        stream_data = messages[0][1]  
+        if not stream_data:
+            return None
 
-    message_id, data = stream_data[0]
-    ticket_id = data["ticket_id"]
+        message_id, data = stream_data[0]
+        ticket_id = data["ticket_id"]
 
-    r.xack(stream_key, group_name, message_id)
+        # 先確認這張票是否已被消化，避免重複處理
+        r.xack(stream_key, group_name, message_id)
 
-    now = int(time.time())
-    ticket_key = f"ticket:{ticket_id}"
+        # ★★★ 檢查狀態：如果是 cancelled，就跳過 ★★★
+        ticket_key = f"ticket:{ticket_id}"
+        if not r.exists(ticket_key):
+            continue # 票不見了，找下一張
 
-    if not r.exists(ticket_key):
-        return None
+        current_status = r.hget(ticket_key, "status")
+        
+        if current_status != "waiting":
+            print(f"⚠️ 跳過無效票券 Ticket #{ticket_id} (Status: {current_status})")
+            # 這裡直接 continue，迴圈會馬上再去 Stream 抓下一張
+            continue
 
-    created_at = int(r.hget(ticket_key, "created_at") or now)
+        # --- 找到活著的票了，開始處理 ---
+        now = int(time.time())
+        created_at = int(r.hget(ticket_key, "created_at") or now)
 
-    # 更新狀態為 serving
-    r.hset(ticket_key, mapping={
-        "status": "serving",
-        "called_at": now,
-        "counter": counter_name,
-    })
+        # 更新狀態為 serving
+        r.hset(ticket_key, mapping={
+            "status": "serving",
+            "called_at": now,
+            "counter": counter_name,
+        })
 
-    current_key = f"current_number:{service}"
-    number = r.hget(ticket_key, "number")
-    r.set(current_key, number)
+        current_key = f"current_number:{service}"
+        number = r.hget(ticket_key, "number")
+        r.set(current_key, number)
 
-    # 統計
-    wait_seconds = now - created_at
-    date_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
-    stats_key = f"stats:{date_str}:{service}:{counter_name}"
-    stats_service_key = f"stats:{date_str}:{service}:ALL"
-    
-    pipe = r.pipeline()
-    pipe.hincrby(stats_key, "count", 1)
-    pipe.hincrby(stats_key, "total_wait", wait_seconds)
-    pipe.hincrby(stats_service_key, "count", 1)
-    pipe.hincrby(stats_service_key, "total_wait", wait_seconds)
-    pipe.execute()
+        # 統計
+        wait_seconds = now - created_at
+        date_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
+        stats_key = f"stats:{date_str}:{service}:{counter_name}"
+        stats_service_key = f"stats:{date_str}:{service}:ALL"
+        
+        pipe = r.pipeline()
+        pipe.hincrby(stats_key, "count", 1)
+        pipe.hincrby(stats_key, "total_wait", wait_seconds)
+        pipe.hincrby(stats_service_key, "count", 1)
+        pipe.hincrby(stats_service_key, "total_wait", wait_seconds)
+        pipe.execute()
 
-    ticket_info = {
-        "ticket_id": int(ticket_id),
-        "number": int(number),
-        "service": service,
-        "counter": counter_name,
-        "called_at": now,
-    }
+        ticket_info = {
+            "ticket_id": int(ticket_id),
+            "number": int(number),
+            "service": service,
+            "counter": counter_name,
+            "called_at": now,
+        }
 
-    channel = f"channel:queue_update:{service}"
-    r.publish(channel, json.dumps(ticket_info))
+        channel = f"channel:queue_update:{service}"
+        r.publish(channel, json.dumps(ticket_info))
 
-    return ticket_info
+        return ticket_info
 
 def cancel_ticket(ticket_id: int) -> bool:
     ticket_key = f"ticket:{ticket_id}"
@@ -145,7 +156,7 @@ def cancel_ticket(ticket_id: int) -> bool:
     return True
 
 # ---------------------------------------------------------
-# get_ticket_status: 取得票券狀態
+# get_ticket_status
 # ---------------------------------------------------------
 def get_ticket_status(ticket_id: int) -> dict | None:
     ticket_key = f"ticket:{ticket_id}"
@@ -160,9 +171,7 @@ def get_ticket_status(ticket_id: int) -> dict | None:
         try:
             my_created = float(data["created_at"])
             query = f"@service:{service} @status:{{waiting}} @created_at:[-inf {my_created - 0.001}]"
-            
             res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "0")
-            
             ahead_count = res[0]
         except Exception as e:
             print("Search error:", e)
@@ -203,7 +212,7 @@ def get_stats_for_date(date_str: str) -> list[dict]:
     return results
 
 # ---------------------------------------------------------
-# get_live_queue_stats: 取得即時統計 (已增加 500 錯誤的容錯)
+# get_live_queue_stats
 # ---------------------------------------------------------
 def get_live_queue_stats() -> list[dict]:
     try:
@@ -226,40 +235,31 @@ def get_live_queue_stats() -> list[dict]:
             })
         return stats
     except redis.exceptions.ResponseError as e:
-        print(f"🔴 ERROR: RediSearch FT.AGGREGATE failed. Is the RediSearch module loaded? Error: {e}")
+        print(f"🔴 ERROR: RediSearch FT.AGGREGATE failed. {e}")
         return []
     except Exception as e:
-        print(f"🔴 ERROR: Unknown error during FT.AGGREGATE. Error: {e}")
+        print(f"🔴 ERROR: Unknown error during FT.AGGREGATE. {e}")
         return []
 
-# queue_core.py (只修改 get_overall_summary 部分)
-
 # ---------------------------------------------------------
-# get_overall_summary: 取得總體系統數據 (含 Waiting, Serving, Done, Cancelled)
+# get_overall_summary
 # ---------------------------------------------------------
 def get_overall_summary() -> dict:
     try:
-        # 1. 使用 FT.SEARCH 分別計算四種狀態的數量
-        # 等待中
         res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
         count_waiting = res_waiting[0] if res_waiting else 0
 
-        # 服務中
         res_serving = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{serving}", "LIMIT", "0", "0")
         count_serving = res_serving[0] if res_serving else 0
 
-        # [新增] 已完成/過號 (status=done)
         res_done = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{done}", "LIMIT", "0", "0")
         count_done = res_done[0] if res_done else 0
 
-        # [新增] 已取消 (status=cancelled)
         res_cancelled = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{cancelled}", "LIMIT", "0", "0")
         count_cancelled = res_cancelled[0] if res_cancelled else 0
 
-        # 2. 讀取總發出票數
         total_issued = int(r.get("ticket:global:id") or 0)
         
-        # 3. 讀取今日服務統計 (Hash)
         today_str = datetime.now().strftime("%Y%m%d")
         total_served_today_data = r.hgetall(f"stats:{today_str}:register:ALL")
         
@@ -272,14 +272,13 @@ def get_overall_summary() -> dict:
             "total_issued": total_issued,
             "live_waiting": count_waiting,
             "live_serving": count_serving,
-            "live_done": count_done,           # 新增回傳
-            "live_cancelled": count_cancelled, # 新增回傳
+            "live_done": count_done,
+            "live_cancelled": count_cancelled,
             "total_served_today": total_served_today,
             "avg_wait_time_today": avg_wait_time_sec,
             "error": None
         }
     except redis.exceptions.ResponseError as e:
-        # 發生錯誤時的預設回傳
         return {
             "error": f"RediSearch Error: {str(e)}",
             "total_issued": int(r.get("ticket:global:id") or 0),
@@ -287,58 +286,10 @@ def get_overall_summary() -> dict:
             "total_served_today": 0, "avg_wait_time_today": 0
         }
     except Exception as e:
-        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
         return {"error": f"Unknown: {str(e)}", "total_issued": 0}
 
-
-    try:
-        # 1. 改用 FT.SEARCH 直接計算數量 (比 Aggregate 更穩定)
-        # 查詢 "waiting" 狀態的總數 (LIMIT 0 0 代表只取數量，不取內容，速度極快)
-        res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
-        count_waiting = res_waiting[0] if res_waiting else 0
-
-        # 查詢 "serving" 狀態的總數
-        res_serving = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{serving}", "LIMIT", "0", "0")
-        count_serving = res_serving[0] if res_serving else 0
-
-        # 查詢 "cancelled" 狀態的總數 (選用)
-        res_cancelled = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{cancelled}", "LIMIT", "0", "0")
-        count_cancelled = res_cancelled[0] if res_cancelled else 0
-
-        # 2. 讀取總發出票數 (用計數器)
-        total_issued = int(r.get("ticket:global:id") or 0)
-        
-        # 3. 讀取今日服務統計 (用於平均時間)
-        today_str = datetime.now().strftime("%Y%m%d")
-        total_served_today_data = r.hgetall(f"stats:{today_str}:register:ALL")
-        
-        total_served_today = int(total_served_today_data.get("count", 0) or 0)
-        total_wait_time = int(total_served_today_data.get("total_wait", 0) or 0)
-        
-        avg_wait_time_sec = total_wait_time / total_served_today if total_served_today > 0 else 0
-
-        return {
-            "total_issued": total_issued,
-            "live_waiting": count_waiting,
-            "live_serving": count_serving,
-            "total_cancelled": count_cancelled,
-            "total_served_today": total_served_today,
-            "avg_wait_time_today": avg_wait_time_sec,
-            "error": None
-        }
-    except redis.exceptions.ResponseError as e:
-        print(f"🔴 ERROR: RediSearch SEARCH failed. Error: {e}")
-        # 如果搜尋失敗，回傳 0 而不是錯誤，讓介面保持顯示
-        return {
-            "error": f"Search Error: {str(e)}",
-            "total_issued": int(r.get("ticket:global:id") or 0),
-            "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0
-        }
-    except Exception as e:
-        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
-        return {"error": f"Unknown: {str(e)}", "total_issued": 0, "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0}
 # ---------------------------------------------------------
-# get_hourly_demand: 取得時段熱度分析 (已修復解析錯誤)
+# get_hourly_demand
 # ---------------------------------------------------------
 def get_hourly_demand() -> list[dict]:
     try:
@@ -358,9 +309,8 @@ def get_hourly_demand() -> list[dict]:
                 for j in range(0, len(row), 2):
                     group_data[row[j]] = row[j+1]
                 
-                # [關鍵修正] 提供安全預設值 0 進行轉換
                 hourly_data.append({
-                    "hour": int(group_data.get('@hour', group_data.get('hour', 0))), # 兼容 @hour 和 hour
+                    "hour": int(group_data.get('@hour', group_data.get('hour', 0))),
                     "count": int(group_data.get('total', 0))
                 })
 
