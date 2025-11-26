@@ -359,5 +359,21 @@ def api_ticket_status(ticket_id):
     status = get_ticket_status(ticket_id)
     return jsonify(status) if status else (jsonify({"error": "not found"}), 404)
 
+# app.py 底部新增
+@app.route("/admin/api/summary", methods=["GET"])
+def api_admin_summary():
+    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
+    summary = get_overall_summary()
+    return jsonify(summary)
+
+@app.route("/admin/api/demand", methods=["GET"])
+def api_admin_demand():
+    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
+    demand = get_hourly_demand()
+    return jsonify(demand)
+
+# 記得要更新 app.py 最上面的 import 區塊，加入 get_overall_summary, get_hourly_demand
+# from queue_core import ( ..., get_live_queue_stats, get_overall_summary, get_hourly_demand, r )
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)

@@ -6,16 +6,16 @@ import redis
 from datetime import datetime
 
 # ---------------------------------------------------------
-# [關鍵修改] 移除 ssl_cert_reqs 參數
+# [連線設定] 智慧連線與連線池限制 (max_connections=10)
 # ---------------------------------------------------------
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
-    # 雲端模式：放寬到 10 個連線 (免費版上限通常是 30，預留一些給 Session)
+    # 雲端模式：使用 ConnectionPool
     pool = redis.ConnectionPool.from_url(
         REDIS_URL, 
         decode_responses=True, 
-        max_connections=10,  # [修改點] 從 1 改成 10
+        max_connections=10, 
         socket_timeout=5
     )
     r = redis.Redis(connection_pool=pool)
@@ -23,7 +23,7 @@ else:
     # 本地模式
     r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
-# 確保 Index 存在 (包在 try-except 避免連線失敗導致 crash)
+# 確保 Index 存在
 try:
     r.execute_command(
         "FT.CREATE", "idx:ticket", "ON", "HASH", "PREFIX", "1", "ticket:",
@@ -32,7 +32,9 @@ try:
 except Exception as e:
     print(f"Index creation skipped or failed: {e}")
 
-# ... (以下函式保持不變) ...
+# ---------------------------------------------------------
+# create_ticket: 創建票券並寫入 Stream
+# ---------------------------------------------------------
 def create_ticket(service: str, line_user_id: str = "") -> dict:
     pipe = r.pipeline()
     ticket_id = r.incr("ticket:global:id")
@@ -63,6 +65,9 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
         "created_at": now
     }
 
+# ---------------------------------------------------------
+# call_next: 叫號，讀取 Stream，並發出 Pub/Sub
+# ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
     stream_key = f"queue_stream:{service}"
     group_name = "counters_group"
@@ -95,6 +100,7 @@ def call_next(service: str, counter_name: str) -> dict | None:
 
     created_at = int(r.hget(ticket_key, "created_at") or now)
 
+    # 更新狀態為 serving
     r.hset(ticket_key, mapping={
         "status": "serving",
         "called_at": now,
@@ -105,6 +111,7 @@ def call_next(service: str, counter_name: str) -> dict | None:
     number = r.hget(ticket_key, "number")
     r.set(current_key, number)
 
+    # 統計
     wait_seconds = now - created_at
     date_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
     stats_key = f"stats:{date_str}:{service}:{counter_name}"
@@ -137,6 +144,9 @@ def cancel_ticket(ticket_id: int) -> bool:
     r.hset(ticket_key, "status", "cancelled")
     return True
 
+# ---------------------------------------------------------
+# get_ticket_status: 取得票券狀態 (已修復 -1 錯誤)
+# ---------------------------------------------------------
 def get_ticket_status(ticket_id: int) -> dict | None:
     ticket_key = f"ticket:{ticket_id}"
     if not r.exists(ticket_key):
@@ -150,11 +160,14 @@ def get_ticket_status(ticket_id: int) -> dict | None:
         try:
             my_created = float(data["created_at"])
             query = f"@service:{service} @status:{{waiting}} @created_at:[-inf {my_created - 0.001}]"
+            
             res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "0")
+            
             ahead_count = res[0]
         except Exception as e:
+            # [修正點] 如果查詢失敗，將 ahead_count 設為 0
             print("Search error:", e)
-            ahead_count = -1 
+            ahead_count = 0 
             
     current_key = f"current_number:{service}"
     current_number = r.get(current_key)
@@ -190,22 +203,117 @@ def get_stats_for_date(date_str: str) -> list[dict]:
         })
     return results
 
+# ---------------------------------------------------------
+# get_live_queue_stats: 取得即時統計 (已增加 500 錯誤的容錯)
+# ---------------------------------------------------------
 def get_live_queue_stats() -> list[dict]:
-    raw = r.execute_command(
-        "FT.AGGREGATE", "idx:ticket",
-        "@status:{waiting|serving}",
-        "GROUPBY", 2, "@service", "@status",
-        "REDUCE", "COUNT", 0, "AS", "cnt",
-    )
-    stats: list[dict] = []
-    if not raw or raw[0] == 0: return stats
-    for row in raw[1:]:
-        row_dict = {}
-        for i in range(0, len(row), 2):
-            row_dict[row[i]] = row[i + 1]
-        stats.append({
-            "service": row_dict.get("service", ""),
-            "status": row_dict.get("status", ""),
-            "count": int(row_dict.get("cnt", 0)),
-        })
-    return stats
+    try:
+        raw = r.execute_command(
+            "FT.AGGREGATE", "idx:ticket",
+            "@status:{waiting|serving}",
+            "GROUPBY", 2, "@service", "@status",
+            "REDUCE", "COUNT", 0, "AS", "cnt",
+        )
+        stats: list[dict] = []
+        if not raw or raw[0] == 0: return stats
+        for row in raw[1:]:
+            row_dict = {}
+            for i in range(0, len(row), 2):
+                row_dict[row[i]] = row[i + 1]
+            stats.append({
+                "service": row_dict.get("service", ""),
+                "status": row_dict.get("status", ""),
+                "count": int(row_dict.get("cnt", 0)),
+            })
+        return stats
+    except redis.exceptions.ResponseError as e:
+        print(f"🔴 ERROR: RediSearch FT.AGGREGATE failed. Is the RediSearch module loaded? Error: {e}")
+        return []
+    except Exception as e:
+        print(f"🔴 ERROR: Unknown error during FT.AGGREGATE. Error: {e}")
+        return []
+
+# ---------------------------------------------------------
+# get_overall_summary: 取得總體系統數據 (Total Issued, Live Count, Avg Time)
+# ---------------------------------------------------------
+def get_overall_summary() -> dict:
+    try:
+        # 1. 計算所有票的狀態分佈 (Live Aggregation)
+        raw = r.execute_command(
+            "FT.AGGREGATE", "idx:ticket", "*",
+            "GROUPBY", 1, "@status",
+            "REDUCE", "COUNT", 0, "AS", "count"
+        )
+        
+        counts = {"waiting": 0, "serving": 0, "cancelled": 0, "done": 0}
+        
+        # 解析聚合結果
+        if raw and raw[0] > 0:
+            for i in range(1, len(raw), 2):
+                status_raw = raw[i][1]
+                count = int(raw[i+1][1])
+                counts[status_raw] = count
+                
+        # 2. 讀取總發出票數 (用計數器)
+        total_issued = int(r.get("ticket:global:id") or 0)
+        
+        # 3. 讀取今日服務統計 (用於平均時間)
+        today_str = datetime.now().strftime("%Y%m%d")
+        total_served_today_data = r.hgetall(f"stats:{today_str}:register:ALL")
+        
+        total_served_today = int(total_served_today_data.get("count", 0) or 0)
+        total_wait_time = int(total_served_today_data.get("total_wait", 0) or 0)
+        
+        avg_wait_time_sec = total_wait_time / total_served_today if total_served_today > 0 else 0
+
+        return {
+            "total_issued": total_issued,
+            "live_waiting": counts["waiting"],
+            "live_serving": counts["serving"],
+            "total_cancelled": counts["cancelled"],
+            "total_served_today": total_served_today,
+            "avg_wait_time_today": avg_wait_time_sec,
+        }
+    except redis.exceptions.ResponseError as e:
+        print(f"🔴 ERROR: RediSearch overall summary failed. Error: {e}")
+        return {
+            "error": "RediSearch Index Missing",
+            "total_issued": int(r.get("ticket:global:id") or 0),
+            "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0
+        }
+    except Exception as e:
+        print(f"🔴 ERROR: Unknown error in overall summary. Error: {e}")
+        return {"error": "Unknown backend error", "total_issued": 0, "live_waiting": 0, "live_serving": 0, "total_served_today": 0, "avg_wait_time_today": 0}
+
+# ---------------------------------------------------------
+# get_hourly_demand: 取得時段熱度分析 (Advanced Aggregation)
+# ---------------------------------------------------------
+def get_hourly_demand() -> list[dict]:
+    try:
+        # 計算時間 (GMT+8)
+        # FT.AGGREGATE 將 Unix Timestamp 轉換成 0-23 的小時數，並聚合計算每個小時的總抽號數量
+        raw = r.execute_command(
+            "FT.AGGREGATE", "idx:ticket", "*", 
+            "APPLY", "FLOOR((@created_at / 3600) % 24)", "AS", "hour", 
+            "GROUPBY", 1, "@hour", 
+            "REDUCE", "COUNT", 0, "AS", "total",
+            "SORTBY", 2, "@hour", "ASC"
+        )
+        
+        hourly_data = []
+        if raw and raw[0] > 0:
+            for i in range(1, len(raw)):
+                row = raw[i]
+                hour = int(row[1])
+                count = int(row[3])
+                hourly_data.append({
+                    "hour": hour,
+                    "count": count
+                })
+        return hourly_data
+    except redis.exceptions.ResponseError as e:
+        print(f"🔴 ERROR: RediSearch hourly demand failed. Error: {e}")
+        return []
+    except Exception as e:
+        print(f"🔴 ERROR: Unknown error in hourly demand. Error: {e}")
+        return []
