@@ -261,13 +261,36 @@ def get_overall_summary() -> dict:
     except Exception as e:
         return {"error": f"Unknown: {str(e)}", "total_issued": 0}
 
+# ---------------------------------------------------------
+# get_hourly_demand: 取得時段熱度分析 (已修正 GMT+8 時區問題)
+# ---------------------------------------------------------
 def get_hourly_demand() -> list[dict]:
     try:
-        raw = r.execute_command("FT.AGGREGATE", "idx:ticket", "*", "APPLY", "FLOOR((@created_at / 3600) % 24)", "AS", "hour", "GROUPBY", 1, "@hour", "REDUCE", "COUNT", 0, "AS", "total", "SORTBY", 2, "@hour", "ASC")
-        data = []
+        # [關鍵修正] @created_at 是 UTC 時間戳
+        # 台灣是 GMT+8，所以我們要加 8小時 (8 * 3600 = 28800 秒) 後再取餘數
+        raw = r.execute_command(
+            "FT.AGGREGATE", "idx:ticket", "*", 
+            "APPLY", "FLOOR(((@created_at + 28800) / 3600) % 24)", "AS", "hour", 
+            "GROUPBY", 1, "@hour", 
+            "REDUCE", "COUNT", 0, "AS", "total",
+            "SORTBY", 2, "@hour", "ASC"
+        )
+        
+        hourly_data = []
         if raw and raw[0] > 0:
-            for row in raw[1:]:
-                rd = {row[i]: row[i+1] for i in range(0, len(row), 2)}
-                data.append({"hour": int(rd.get('hour', 0)), "count": int(rd.get('total', 0))})
-        return data
-    except: return []
+            for i in range(1, len(raw)):
+                row = raw[i]
+                group_data = {}
+                for j in range(0, len(row), 2):
+                    group_data[row[j]] = row[j+1]
+                
+                hourly_data.append({
+                    "hour": int(group_data.get('@hour', group_data.get('hour', 0))),
+                    "count": int(group_data.get('total', 0))
+                })
+
+        return hourly_data
+    except redis.exceptions.ResponseError as e:
+        return {"error": "RediSearch Module Failure"}
+    except Exception as e:
+        return {"error": "Unknown backend error"}
