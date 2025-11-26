@@ -41,7 +41,14 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET) if LINE_CHANNEL_SECRET else None
 # Redis Session 連線設定
 REDIS_URL = os.environ.get("REDIS_URL")
 if REDIS_URL:
-    session_redis = redis.from_url(REDIS_URL)
+    # [關鍵修改] 為 Session 也建立一個受限的連線池
+    # 限制 max_connections=5 (加上 queue_core 的 10，總共 15，遠低於 30)
+    session_pool = redis.ConnectionPool.from_url(
+        REDIS_URL, 
+        max_connections=5, 
+        socket_timeout=5
+    )
+    session_redis = redis.Redis(connection_pool=session_pool)
 else:
     session_redis = redis.Redis(host="localhost", port=6379, db=0)
 
