@@ -1,4 +1,4 @@
-# app.py
+\# app.py
 import os
 import json
 import threading
@@ -16,7 +16,7 @@ import io
 # 引用 queue_core
 from queue_core import (
     create_ticket, call_next, get_ticket_status,
-    get_stats_for_date, cancel_ticket, get_live_queue_stats, r
+    get_stats_for_date, cancel_ticket, get_live_queue_stats, get_overall_summary, get_hourly_demand, r # 確保匯入了所有新函式
 )
 
 from linebot import LineBotApi, WebhookHandler
@@ -24,7 +24,6 @@ from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from dotenv import load_dotenv
 
-# 載入 .env
 load_dotenv()
 
 app = Flask(__name__)
@@ -39,12 +38,9 @@ LINE_CHANNEL_ACCESS_TOKEN = channel_token.strip() if channel_token else None
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN) if LINE_CHANNEL_ACCESS_TOKEN else None
 handler = WebhookHandler(LINE_CHANNEL_SECRET) if LINE_CHANNEL_SECRET else None
 
-# ----------------------------------------------------------
-# [關鍵修改] Redis Session 連線設定
-# ----------------------------------------------------------
+# Redis Session 連線設定
 REDIS_URL = os.environ.get("REDIS_URL")
 if REDIS_URL:
-    # 這裡不需要 connection pool，因為 flask-session 會自己管理
     session_redis = redis.from_url(REDIS_URL)
 else:
     session_redis = redis.Redis(host="localhost", port=6379, db=0)
@@ -70,9 +66,7 @@ def clear_line_user_ticket(user_id: str):
     key = f"line_user:{user_id}"
     r.delete(key)
 
-# ============================================================
-# 🔥 [核心架構] 廣播系統 (Message Announcer)
-# ============================================================
+# 廣播系統
 class MessageAnnouncer:
     def __init__(self):
         self.listeners = []
@@ -83,14 +77,12 @@ class MessageAnnouncer:
         return q
 
     def announce(self, msg):
-        # 廣播給所有正在聽的 Queue
         for i in reversed(range(len(self.listeners))):
             try:
                 self.listeners[i].put_nowait(msg)
             except queue.Full:
                 del self.listeners[i]
 
-# 全域廣播器實例
 announcer = MessageAnnouncer()
 
 # 背景執行緒：監聽 Redis 並轉發給廣播器
@@ -107,28 +99,22 @@ def redis_listener_worker():
 
     for message in pubsub.listen():
         if message["type"] == "pmessage":
-            data_str = message["data"]
-            # 1. 轉發給廣播器 (服務網頁 SSE)
-            sse_msg = f"data: {data_str}\n\n"
-            announcer.announce(sse_msg)
-            
-            # 2. 處理 LINE 推播 (服務 LINE 使用者)
             try:
+                data_str = message["data"]
+                sse_msg = f"data: {data_str}\n\n"
+                announcer.announce(sse_msg)
+                
                 ticket_data = json.loads(data_str)
-                # 這裡為了避免多執行緒競爭，我們需要一個獨立的 Redis 連線來操作鎖
-                # 簡單起見，直接用 pubsub_r (雖然它主要在 listen，但同一連線操作其他指令可能會 block)
-                # 最安全是用 r (從 queue_core 來的全域連線)
                 handle_push_notification(ticket_data)
             except Exception as e:
                 print(f"🔴 Push Error: {e}", flush=True)
 
 def handle_push_notification(ticket_data):
-    # 獨立出來的推播邏輯
     ticket_id = ticket_data["ticket_id"]
     number = ticket_data["number"]
     counter = ticket_data["counter"]
     
-    # 去重鎖 (使用全域 r 連線)
+    # 去重鎖
     dedup_key = f"dedup:push:{ticket_id}:{number}"
     is_first_handler = r.set(dedup_key, "1", ex=60, nx=True)
     
@@ -151,28 +137,8 @@ if not any(t.name == "GlobalRedisListener" for t in threading.enumerate()):
     t = threading.Thread(target=redis_listener_worker, daemon=True, name="GlobalRedisListener")
     t.start()
 
-# ============================================================
-# SSE 路由 (聽廣播器)
-# ============================================================
-@app.route("/events/<service>")
-def events(service):
-    def stream():
-        messages = announcer.listen()
-        try:
-            current_num = r.get(f"current_number:{service}")
-            if current_num:
-                init_data = json.dumps({"ticket_id": 0, "number": int(current_num), "service": service, "counter": "", "status": "update"})
-                yield f"data: {init_data}\n\n"
-        except:
-            pass
 
-        while True:
-            msg = messages.get()
-            yield msg
-
-    return Response(stream(), mimetype="text/event-stream")
-
-# ------------------ 以下路由保持不變 ------------------
+# ------------------ LINE Webhook (保持不變) ------------------
 
 @app.route("/line/webhook", methods=["POST"])
 def line_webhook():
@@ -264,6 +230,7 @@ def handle_line_message(event):
     else:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入：我要抽號、查詢、或取消。"))
 
+# ------------------ Route ------------------
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
@@ -312,14 +279,40 @@ def api_call_next(service):
     if not ticket: return jsonify({"message": "no one in queue"}), 200
     return jsonify(ticket)
 
+# -------------------------------------------------------------
+# [關鍵修正] API 路由 (確保返回 JSON，避免前端崩潰)
+# -------------------------------------------------------------
+@app.route("/admin/api/summary", methods=["GET"])
+def api_admin_summary():
+    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
+    try:
+        summary = get_overall_summary()
+        return jsonify(summary)
+    except Exception as e:
+        # 捕捉所有錯誤，並返回 JSON 格式的錯誤報告
+        return jsonify({"error": f"Backend Error during Summary API: {str(e)}", "total_issued": 0, "live_waiting": "N/A"}), 500
+
+@app.route("/admin/api/demand", methods=["GET"])
+def api_admin_demand():
+    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
+    try:
+        demand = get_hourly_demand()
+        return jsonify(demand)
+    except Exception as e:
+        # 捕捉所有錯誤，並返回 JSON 格式的錯誤報告
+        return jsonify({"error": f"Backend Error during Demand API: {str(e)}"}), 500
+
+
 @app.route("/admin/stats/live")
 def admin_stats_live():
+    # 舊的路由，保持不動或移除
     if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
     stats = get_live_queue_stats()
     return jsonify(stats)
 
 @app.route("/admin/stats/today-summary", methods=["GET"])
 def admin_stats_today_summary():
+    # 舊的路由，保持不動或移除
     if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
     today_str = datetime.now().strftime("%Y%m%d")
     stats = get_stats_for_date(today_str)
@@ -327,6 +320,29 @@ def admin_stats_today_summary():
     total_count = sum(row["count"] for row in service_rows)
     overall_avg = sum(row["avg_wait_seconds"] * row["count"] for row in service_rows) / total_count if total_count else 0
     return jsonify({"date": today_str, "total_count": total_count, "overall_avg_wait_seconds": overall_avg, "services": service_rows})
+
+@app.route("/events/<service>")
+def events(service):
+    def generate():
+        current_num = r.get(f"current_number:{service}")
+        if current_num:
+            init_data = json.dumps({"ticket_id": 0, "number": int(current_num), "service": service, "counter": "", "status": "update"})
+            yield f"data: {init_data}\n\n"
+        
+        # [關鍵修正] 確保 SSE 仍能使用 r.get
+        if REDIS_URL:
+            sse_r = redis.from_url(REDIS_URL, decode_responses=True)
+        else:
+            sse_r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            
+        pubsub = sse_r.pubsub()
+        channel = f"channel:queue_update:{service}"
+        pubsub.subscribe(channel)
+        
+        for message in pubsub.listen():
+            if message["type"] == "message":
+                yield f"data: {message['data']}\n\n"
+    return Response(generate(), mimetype="text/event-stream")
 
 @app.route("/session/status", methods=["GET"])
 def session_status():
@@ -358,22 +374,6 @@ def session_clear():
 def api_ticket_status(ticket_id):
     status = get_ticket_status(ticket_id)
     return jsonify(status) if status else (jsonify({"error": "not found"}), 404)
-
-# app.py 底部新增
-@app.route("/admin/api/summary", methods=["GET"])
-def api_admin_summary():
-    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
-    summary = get_overall_summary()
-    return jsonify(summary)
-
-@app.route("/admin/api/demand", methods=["GET"])
-def api_admin_demand():
-    if not session.get("admin_logged_in"): return jsonify({"error": "unauthorized"}), 401
-    demand = get_hourly_demand()
-    return jsonify(demand)
-
-# 記得要更新 app.py 最上面的 import 區塊，加入 get_overall_summary, get_hourly_demand
-# from queue_core import ( ..., get_live_queue_stats, get_overall_summary, get_hourly_demand, r )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
