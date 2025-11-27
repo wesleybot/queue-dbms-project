@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 # ---------------------------------------------------------
-# [連線設定]
+# [連線設定] 限制 max_connections=4
 # ---------------------------------------------------------
 REDIS_URL = os.environ.get("REDIS_URL")
 
@@ -39,9 +39,8 @@ def ensure_index_exists():
 ensure_index_exists()
 
 # ---------------------------------------------------------
-# 核心功能函式
+# create_ticket
 # ---------------------------------------------------------
-
 def create_ticket(service: str, line_user_id: str = "") -> dict:
     pipe = r.pipeline()
     ticket_id = r.incr("ticket:global:id")
@@ -76,29 +75,22 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
     }
 
 # ---------------------------------------------------------
-# [關鍵修正] call_next: 先將上一位設為 done，再叫下一位
+# [關鍵邏輯變更] call_next: 計算服務時間 (Service Time)
 # ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
     
-    # ★★★ 新增：自動結案邏輯 ★★★
-    # 在叫下一號之前，先搜尋該服務目前正在 "serving" 的票，全部改成 "done"
+    # 1. 自動結案：將上一位 serving 改為 done
     try:
-        # 這裡搜尋所有 status=serving 的票
-        # (如果你希望只關閉自己櫃台的票，可以加 @counter:{counter_name}，但在簡易系統中，清空所有 serving 比較保險)
         query = f"@service:{service} @status:{{serving}}"
         res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "1000")
-        
-        # FT.SEARCH 回傳格式：[總數, key1, [fields...], key2, [fields...]...]
         if res and res[0] > 0:
             for i in range(1, len(res), 2):
-                old_ticket_key = res[i] # 例如 "ticket:10"
+                old_ticket_key = res[i]
                 r.hset(old_ticket_key, "status", "done")
-                print(f"✅ Auto-completed previous ticket: {old_ticket_key}")
-    except Exception as e:
-        print(f"⚠️ Cleanup previous tickets failed: {e}")
-    # ★★★ 結案邏輯結束 ★★★
+    except Exception:
+        pass
 
-
+    # 2. 處理 Stream
     stream_key = f"queue_stream:{service}"
     group_name = "counters_group"
     consumer_name = counter_name
@@ -110,13 +102,10 @@ def call_next(service: str, counter_name: str) -> dict | None:
 
     while True:
         messages = r.xreadgroup(group_name, consumer_name, {stream_key: ">"}, count=1)
-
-        if not messages:
-            return None
+        if not messages: return None
         
         stream_data = messages[0][1]  
-        if not stream_data:
-            return None
+        if not stream_data: return None
 
         message_id, data = stream_data[0]
         ticket_id = data["ticket_id"]
@@ -124,13 +113,12 @@ def call_next(service: str, counter_name: str) -> dict | None:
         r.xack(stream_key, group_name, message_id)
 
         ticket_key = f"ticket:{ticket_id}"
-        if not r.exists(ticket_key):
-            continue
+        if not r.exists(ticket_key): continue
 
         current_status = r.hget(ticket_key, "status")
-        if current_status != "waiting":
-            continue
+        if current_status != "waiting": continue
 
+        # --- 叫號成功 ---
         now = int(time.time())
         r.hset(ticket_key, mapping={
             "status": "serving",
@@ -142,16 +130,35 @@ def call_next(service: str, counter_name: str) -> dict | None:
         number = r.hget(ticket_key, "number")
         r.set(current_key, number)
 
-        created_at = int(r.hget(ticket_key, "created_at") or now)
-        wait_seconds = now - created_at
-        date_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
+        # ★★★ [新邏輯] 計算服務時間 (Service Duration) ★★★
+        # 邏輯：這次叫號時間 - 上次叫號時間 = 上一位客人的服務時間
+        last_activity_key = f"counter:last_activity:{service}:{counter_name}"
+        last_time = r.get(last_activity_key)
+        
+        # 更新最後活動時間為現在
+        r.set(last_activity_key, now)
+
+        today_str = datetime.fromtimestamp(now).strftime("%Y%m%d")
+        stats_key = f"stats:{today_str}:{service}:{counter_name}"
+        stats_service_key = f"stats:{today_str}:{service}:ALL"
         
         pipe = r.pipeline()
-        pipe.hincrby(f"stats:{date_str}:{service}:{counter_name}", "count", 1)
-        pipe.hincrby(f"stats:{date_str}:{service}:{counter_name}", "total_wait", wait_seconds)
-        pipe.hincrby(f"stats:{date_str}:{service}:ALL", "count", 1)
-        pipe.hincrby(f"stats:{date_str}:{service}:ALL", "total_wait", wait_seconds)
+        # 總叫號次數
+        pipe.hincrby(stats_key, "count", 1)
+        pipe.hincrby(stats_service_key, "count", 1)
+
+        if last_time:
+            duration = now - int(last_time)
+            # 只有當間隔小於 1 小時才計入 (避免午休拉壞平均)
+            if duration < 3600:
+                pipe.hincrby(stats_key, "total_svc_time", duration)
+                pipe.hincrby(stats_key, "svc_count", 1) # 有效服務次數
+                
+                pipe.hincrby(stats_service_key, "total_svc_time", duration)
+                pipe.hincrby(stats_service_key, "svc_count", 1)
+        
         pipe.execute()
+        # ★★★ [新邏輯結束] ★★★
 
         ticket_info = {
             "ticket_id": int(ticket_id),
@@ -160,10 +167,7 @@ def call_next(service: str, counter_name: str) -> dict | None:
             "counter": counter_name,
             "called_at": now,
         }
-
-        channel = f"channel:queue_update:{service}"
-        r.publish(channel, json.dumps(ticket_info))
-
+        r.publish(f"channel:queue_update:{service}", json.dumps(ticket_info))
         return ticket_info
 
 def cancel_ticket(ticket_id: int) -> bool:
@@ -188,8 +192,7 @@ def get_ticket_status(ticket_id: int) -> dict | None:
             res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "0")
             ahead_count = res[0]
         except redis.exceptions.ResponseError as e:
-            if "no such index" in str(e).lower():
-                ensure_index_exists()
+            if "no such index" in str(e).lower(): ensure_index_exists()
             ahead_count = 0
         except Exception:
             ahead_count = 0 
@@ -218,10 +221,16 @@ def get_stats_for_date(date_str: str) -> list[dict]:
         if len(parts) < 4: continue
         _, _, service, counter = parts
         data = r.hgetall(key)
+        
+        # [新邏輯] 改用 svc_count 計算平均
+        svc_cnt = int(data.get("svc_count", 0))
+        total_svc = int(data.get("total_svc_time", 0))
+        avg = total_svc / svc_cnt if svc_cnt > 0 else 0
+        
         results.append({
             "service": service, "counter": counter,
             "count": int(data.get("count", 0)), 
-            "avg_wait_seconds": int(data.get("total_wait", 0)) / int(data.get("count", 1)) if int(data.get("count", 0)) > 0 else 0
+            "avg_wait_seconds": avg
         })
     return results
 
@@ -239,6 +248,9 @@ def get_live_queue_stats() -> list[dict]:
         return []
     except: return []
 
+# ---------------------------------------------------------
+# [關鍵修正] get_overall_summary: 改讀取 svc_time
+# ---------------------------------------------------------
 def get_overall_summary() -> dict:
     try:
         res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
@@ -249,8 +261,14 @@ def get_overall_summary() -> dict:
         total_issued = int(r.get("ticket:global:id") or 0)
         today_str = datetime.now().strftime("%Y%m%d")
         total_data = r.hgetall(f"stats:{today_str}:register:ALL")
+        
         total_served = int(total_data.get("count", 0) or 0)
-        avg_wait = int(total_data.get("total_wait", 0) or 0) / total_served if total_served > 0 else 0
+        
+        # [新邏輯] 讀取服務時長
+        total_svc_time = int(total_data.get("total_svc_time", 0) or 0)
+        svc_count = int(total_data.get("svc_count", 0) or 0)
+        
+        avg_svc_time = total_svc_time / svc_count if svc_count > 0 else 0
 
         return {
             "total_issued": total_issued,
@@ -259,13 +277,14 @@ def get_overall_summary() -> dict:
             "live_done": res_done[0] if res_done else 0,
             "live_cancelled": res_cancelled[0] if res_cancelled else 0,
             "total_served_today": total_served,
-            "avg_wait_time_today": avg_wait,
+            "avg_wait_time_today": avg_svc_time, 
             "error": None
         }
     except Exception as e: return {"error": str(e), "total_issued": 0}
 
 def get_hourly_demand() -> list[dict]:
     try:
+        # [時區修正] +8 小時
         raw = r.execute_command("FT.AGGREGATE", "idx:ticket", "*", "APPLY", "FLOOR(((@created_at + 28800) / 3600) % 24)", "AS", "hour", "GROUPBY", 1, "@hour", "REDUCE", "COUNT", 0, "AS", "total", "SORTBY", 2, "@hour", "ASC")
         data = []
         if raw and raw[0] > 0:
