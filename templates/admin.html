@@ -2,8 +2,13 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="utf-8" />
-    <title>叫號系統 - 管理儀表板</title>
+    <title>管理儀表板 - Queue System</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -12,112 +17,243 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+
     <style>
+      :root {
+        --bg-color: #f8f9fa;
+        --card-bg: #ffffff;
+        --text-primary: #2d3748;
+      }
       body {
-        background-color: #f7f9fc;
+        background-color: var(--bg-color);
+        font-family: "Noto Sans TC", sans-serif;
+        color: var(--text-primary);
+      }
+
+      /* Navbar */
+      .navbar {
+        background: #1a202c !important; /* Dark theme for admin */
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .navbar-brand {
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      /* Cards */
+      .admin-card {
+        border: none;
+        border-radius: 16px;
+        background: var(--card-bg);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        height: 100%;
+        overflow: hidden;
       }
       .card-header {
-        background-color: #ffffff;
-        font-weight: 600;
-        border-bottom: 1px solid #e2e8f0;
+        background: #fff;
+        border-bottom: 1px solid #edf2f7;
+        padding: 1rem 1.5rem;
+        font-weight: 700;
+        color: #4a5568;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
       }
-      .dashboard-value {
+
+      /* Metric Boxes (頂部三個數據) */
+      .metric-card {
+        border-left: 4px solid;
+        transition: transform 0.2s;
+      }
+      .metric-card:hover {
+        transform: translateY(-2px);
+      }
+      .metric-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+      }
+      .metric-value {
         font-size: 2rem;
+        font-weight: 800;
+        color: #2d3748;
+      }
+
+      /* Status Grid (排隊狀態) */
+      .status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        text-align: center;
+      }
+      .status-item {
+        padding: 1rem;
+        border-radius: 12px;
+        background: #f7fafc;
+      }
+      .status-label {
+        font-size: 0.85rem;
+        color: #718096;
+        margin-bottom: 0.25rem;
+      }
+      .status-value {
+        font-size: 1.5rem;
         font-weight: 700;
       }
-      .control-panel-card {
+
+      /* Control Panel */
+      .control-input {
+        border-radius: 8px;
+        padding: 0.6rem;
         border: 1px solid #e2e8f0;
       }
-      .info-box {
-        border-left: 5px solid;
-        border-radius: 4px;
-        padding: 10px;
+      .btn-call {
+        width: 100%;
+        padding: 0.8rem;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #3182ce 0%, #2b6cb0 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        transition: all 0.2s;
+      }
+      .btn-call:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        color: white;
+      }
+      .btn-call:active {
+        transform: scale(0.98);
+      }
+
+      /* Log Box */
+      .log-box {
+        background: #2d3748;
+        color: #48bb78; /* Terminal Green */
+        font-family: "Courier New", monospace;
+        padding: 1rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        min-height: 120px;
+        margin-top: 1rem;
       }
     </style>
   </head>
-  <body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark shadow-sm">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="/">Queue Ticket System 管理儀表板</a>
-        <div class="d-flex align-items-center gap-2">
-          <span class="text-light small">櫃台：admin</span>
-          <a href="/admin/logout" class="btn btn-outline-light btn-sm">登出</a>
+  <body>
+    <nav class="navbar navbar-dark sticky-top">
+      <div class="container-fluid px-4">
+        <a class="navbar-brand" href="/">
+          <i class="fa-solid me-2"></i>Queue Admin
+        </a>
+        <div class="d-flex align-items-center gap-3">
+          <span class="text-secondary small"
+            ><i class="fa-solid fa-user me-1"></i> {{ admin_name }}</span
+          >
+          <a
+            href="/admin/logout"
+            class="btn btn-outline-secondary btn-sm text-light border-secondary"
+            >登出</a
+          >
         </div>
       </div>
     </nav>
 
-    <main class="container-fluid py-4">
+    <main class="container-fluid px-4 py-4">
       <div class="row g-4">
-        <div class="col-lg-4">
-          <div class="card shadow-sm control-panel-card h-100">
-            <div class="card-header bg-primary text-white">
-              <i class="fa-solid fa-bell me-2"></i>叫號控制台
+        <div class="col-lg-3">
+          <div class="admin-card">
+            <div class="card-header">
+              <span><i class="fa-solid fa-gamepad me-2"></i>叫號控制台</span>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
               <div class="mb-3">
-                <label class="form-label">服務類型 (service)</label>
-                <select id="service-select" class="form-select">
-                  <option value="register" selected>register（預設）</option>
+                <label class="form-label small fw-bold text-muted"
+                  >服務 Service</label
+                >
+                <select id="service-select" class="form-select control-input">
+                  <option value="register" selected>register (預設)</option>
                 </select>
               </div>
-              <div class="mb-3">
-                <label class="form-label">櫃台名稱 (counter)</label>
+              <div class="mb-4">
+                <label class="form-label small fw-bold text-muted"
+                  >櫃台 Counter</label
+                >
                 <input
                   id="counter-input"
                   type="text"
-                  class="form-control"
-                  placeholder="例如：counter-1"
+                  class="form-control control-input"
                   value="counter-1"
                 />
               </div>
-              <button
-                id="btn-call-next"
-                class="btn btn-primary btn-lg w-100 mb-3"
-              >
-                叫下一位
+
+              <button id="btn-call-next" class="btn-call shadow-sm">
+                <i class="fa-solid fa-bullhorn me-2"></i> 呼叫下一位
               </button>
-              <h6 class="mt-4">最近一次叫號結果</h6>
-              <pre
-                id="last-call-result"
-                class="small bg-light border rounded p-2"
-                style="min-height: 6rem"
-              >
-尚未叫號</pre
-              >
+
+              <div class="mt-4">
+                <label class="form-label small fw-bold text-muted"
+                  >系統日誌 System Log</label
+                >
+                <pre id="last-call-result" class="log-box">等待操作...</pre>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="col-lg-8">
+        <div class="col-lg-9">
           <div class="row g-3 mb-4">
             <div class="col-md-4">
-              <div class="card info-box" style="border-color: #4e73df">
-                <div class="card-body p-3">
-                  <div class="text-uppercase text-primary fw-bold small">
-                    總共抽號人數 (Issued)
+              <div
+                class="admin-card metric-card p-3"
+                style="border-color: #4299e1"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="metric-label text-primary">總抽號數 Issued</div>
+                    <div id="total-issued" class="metric-value">--</div>
                   </div>
-                  <div id="total-issued" class="dashboard-value">--</div>
+                  <div class="bg-blue-100 p-2 rounded text-primary bg-light">
+                    <i class="fa-solid fa-ticket fa-lg"></i>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="col-md-4">
-              <div class="card info-box" style="border-color: #1cc88a">
-                <div class="card-body p-3">
-                  <div class="text-uppercase text-success fw-bold small">
-                    今日服務人數 (Served)
+              <div
+                class="admin-card metric-card p-3"
+                style="border-color: #48bb78"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="metric-label text-success">
+                      已服務人數 Served
+                    </div>
+                    <div id="total-served-today" class="metric-value">--</div>
                   </div>
-                  <div id="total-served-today" class="dashboard-value">--</div>
+                  <div class="bg-green-100 p-2 rounded text-success bg-light">
+                    <i class="fa-solid fa-check-double fa-lg"></i>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="col-md-4">
-              <div class="card info-box" style="border-color: #f6c23e">
-                <div class="card-body p-3">
-                  <div class="text-uppercase text-warning fw-bold small">
-                    今日平均等待時間 (Avg Wait)
+              <div
+                class="admin-card metric-card p-3"
+                style="border-color: #ecc94b"
+              >
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="metric-label text-warning">
+                      平均服務時間 Avg Time
+                    </div>
+                    <div id="avg-wait-time-today" class="metric-value">
+                      -- s
+                    </div>
                   </div>
-                  <div id="avg-wait-time-today" class="dashboard-value">
-                    -- 秒
+                  <div class="bg-yellow-100 p-2 rounded text-warning bg-light">
+                    <i class="fa-solid fa-stopwatch fa-lg"></i>
                   </div>
                 </div>
               </div>
@@ -126,66 +262,48 @@
 
           <div class="row g-3">
             <div class="col-md-6">
-              <div class="card shadow-sm h-100">
+              <div class="admin-card">
                 <div class="card-header">
-                  <i class="fa-solid fa-list-check me-2"></i>即時排隊狀態
-                  (RediSearch)
                   <span
-                    class="badge bg-secondary float-end"
+                    ><i class="fa-solid fa-satellite-dish me-2"></i
+                    >即時排隊監控</span
+                  >
+                  <span
+                    class="badge bg-light text-dark border"
                     id="live-stats-time"
                     >--</span
                   >
                 </div>
-                <div class="card-body">
-                  <p class="text-muted small">即時統計各狀態的人數。</p>
-
-                  <div class="row text-center mb-3">
-                    <div class="col-6 border-end">
-                      <div class="small text-muted">等待中 Waiting</div>
-                      <div
-                        id="live-waiting"
-                        class="dashboard-value text-danger"
-                      >
+                <div class="card-body p-4">
+                  <div class="status-grid">
+                    <div class="status-item">
+                      <div class="status-label">等待中 Waiting</div>
+                      <div id="live-waiting" class="status-value text-danger">
                         --
                       </div>
                     </div>
-                    <div class="col-6">
-                      <div class="small text-muted">服務中 Serving</div>
-                      <div
-                        id="live-serving"
-                        class="dashboard-value text-success"
-                      >
+                    <div class="status-item">
+                      <div class="status-label">服務中 Serving</div>
+                      <div id="live-serving" class="status-value text-success">
                         --
                       </div>
                     </div>
-                  </div>
-
-                  <hr class="my-2 text-muted" style="opacity: 0.2" />
-
-                  <div class="row text-center mt-3">
-                    <div class="col-6 border-end">
-                      <div class="small text-muted">已服務/過號 Done</div>
-                      <div
-                        id="live-done"
-                        class="dashboard-value text-secondary"
-                      >
+                    <div class="status-item">
+                      <div class="status-label">已完成 Done</div>
+                      <div id="live-done" class="status-value text-secondary">
                         --
                       </div>
                     </div>
-                    <div class="col-6">
-                      <div class="small text-muted">取消抽號 Cancelled</div>
-                      <div
-                        id="live-cancelled"
-                        class="dashboard-value text-muted"
-                      >
+                    <div class="status-item">
+                      <div class="status-label">已取消 Cancelled</div>
+                      <div id="live-cancelled" class="status-value text-muted">
                         --
                       </div>
                     </div>
                   </div>
-
                   <div
-                    class="alert alert-danger p-2 small mt-2"
                     id="live-error"
+                    class="alert alert-danger mt-3 small py-1 px-2"
                     style="display: none"
                   ></div>
                 </div>
@@ -193,31 +311,34 @@
             </div>
 
             <div class="col-md-6">
-              <div class="card shadow-sm h-100">
+              <div class="admin-card">
                 <div class="card-header">
-                  <i class="fa-solid fa-chart-bar me-2"></i>時段熱度分析 (Hourly
-                  Demand)
+                  <span
+                    ><i class="fa-solid fa-chart-column me-2"></i>時段熱度分析
+                    (Hourly)</span
+                  >
                 </div>
-                <div class="card-body">
-                  <p class="text-muted small">基於抽號時間統計各時段需求。</p>
-                  <table class="table table-sm table-striped mt-3">
-                    <thead>
-                      <tr>
-                        <th>時段 (Hour)</th>
-                        <th>總抽號數</th>
-                      </tr>
-                    </thead>
-                    <tbody id="hourly-demand-body">
-                      <tr>
-                        <td colspan="2" class="text-center text-muted">
-                          載入中...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th class="ps-4">時段</th>
+                          <th>抽號量</th>
+                        </tr>
+                      </thead>
+                      <tbody id="hourly-demand-body">
+                        <tr>
+                          <td colspan="2" class="text-center text-muted py-4">
+                            載入中...
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                   <div
-                    class="alert alert-danger p-2 small mt-2"
                     id="demand-error"
+                    class="alert alert-danger m-3 small py-1 px-2"
                     style="display: none"
                   ></div>
                 </div>
