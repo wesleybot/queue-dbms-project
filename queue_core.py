@@ -3,6 +3,7 @@ import time
 import json
 import os
 import redis
+import uuid
 from datetime import datetime
 
 # ---------------------------------------------------------
@@ -11,23 +12,20 @@ from datetime import datetime
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
-    # 雲端模式：使用 ConnectionPool，限制連線數
     pool = redis.ConnectionPool.from_url(
         REDIS_URL, 
         decode_responses=True, 
-        max_connections=4, # 降低連線數避免爆量
+        max_connections=4, 
         socket_timeout=5
     )
     r = redis.Redis(connection_pool=pool)
 else:
-    # 本地模式
     r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
 # ---------------------------------------------------------
-# [關鍵新增] 自動確保索引存在的函式
+# 自動確保索引存在
 # ---------------------------------------------------------
 def ensure_index_exists():
-    """嘗試建立索引，如果已存在則忽略錯誤"""
     try:
         r.execute_command(
             "FT.CREATE", "idx:ticket", "ON", "HASH", "PREFIX", "1", "ticket:",
@@ -35,11 +33,9 @@ def ensure_index_exists():
         )
         print("✅ Index 'idx:ticket' created successfully.")
     except redis.exceptions.ResponseError as e:
-        # 如果錯誤是 "Index already exists"，我們就忽略它
         if "Index already exists" not in str(e):
             print(f"⚠️ Index creation failed: {e}")
 
-# 系統啟動時先嘗試一次
 ensure_index_exists()
 
 # ---------------------------------------------------------
@@ -51,6 +47,8 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
     ticket_id = r.incr("ticket:global:id")
     number = ticket_id
     now = int(time.time())
+    access_token = str(uuid.uuid4())
+    
     ticket_key = f"ticket:{ticket_id}"
     stream_key = f"queue_stream:{service}"
 
@@ -61,7 +59,8 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
         "created_at": now,
         "called_at": "",
         "counter": "",
-        "line_user_id": line_user_id 
+        "line_user_id": line_user_id,
+        "token": access_token
     }
     
     pipe.hset(ticket_key, mapping=mapping_data)
@@ -72,21 +71,43 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
         "ticket_id": ticket_id,
         "number": number,
         "service": service,
-        "created_at": now
+        "created_at": now,
+        "token": access_token
     }
 
+# ---------------------------------------------------------
+# [關鍵修正] call_next: 先將上一位設為 done，再叫下一位
+# ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
+    
+    # ★★★ 新增：自動結案邏輯 ★★★
+    # 在叫下一號之前，先搜尋該服務目前正在 "serving" 的票，全部改成 "done"
+    try:
+        # 這裡搜尋所有 status=serving 的票
+        # (如果你希望只關閉自己櫃台的票，可以加 @counter:{counter_name}，但在簡易系統中，清空所有 serving 比較保險)
+        query = f"@service:{service} @status:{{serving}}"
+        res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "1000")
+        
+        # FT.SEARCH 回傳格式：[總數, key1, [fields...], key2, [fields...]...]
+        if res and res[0] > 0:
+            for i in range(1, len(res), 2):
+                old_ticket_key = res[i] # 例如 "ticket:10"
+                r.hset(old_ticket_key, "status", "done")
+                print(f"✅ Auto-completed previous ticket: {old_ticket_key}")
+    except Exception as e:
+        print(f"⚠️ Cleanup previous tickets failed: {e}")
+    # ★★★ 結案邏輯結束 ★★★
+
+
     stream_key = f"queue_stream:{service}"
     group_name = "counters_group"
     consumer_name = counter_name
 
-    # 確保 Consumer Group 存在
     try:
         r.xgroup_create(stream_key, group_name, id="0", mkstream=True)
     except redis.exceptions.ResponseError:
         pass
 
-    # 迴圈過濾無效票
     while True:
         messages = r.xreadgroup(group_name, consumer_name, {stream_key: ">"}, count=1)
 
@@ -106,12 +127,10 @@ def call_next(service: str, counter_name: str) -> dict | None:
         if not r.exists(ticket_key):
             continue
 
-        # 檢查是否已取消
         current_status = r.hget(ticket_key, "status")
         if current_status != "waiting":
             continue
 
-        # 處理有效票
         now = int(time.time())
         r.hset(ticket_key, mapping={
             "status": "serving",
@@ -149,8 +168,7 @@ def call_next(service: str, counter_name: str) -> dict | None:
 
 def cancel_ticket(ticket_id: int) -> bool:
     ticket_key = f"ticket:{ticket_id}"
-    if not r.exists(ticket_key):
-        return False
+    if not r.exists(ticket_key): return False
     r.hset(ticket_key, "status", "cancelled")
     return True
 
@@ -171,7 +189,7 @@ def get_ticket_status(ticket_id: int) -> dict | None:
             ahead_count = res[0]
         except redis.exceptions.ResponseError as e:
             if "no such index" in str(e).lower():
-                ensure_index_exists() # 自動修復索引
+                ensure_index_exists()
             ahead_count = 0
         except Exception:
             ahead_count = 0 
@@ -217,23 +235,17 @@ def get_live_queue_stats() -> list[dict]:
                 stats.append({"service": rd.get("service"), "status": rd.get("status"), "count": int(rd.get("cnt", 0))})
         return stats
     except redis.exceptions.ResponseError as e:
-        if "no such index" in str(e).lower():
-            ensure_index_exists() # 自動修復
+        if "no such index" in str(e).lower(): ensure_index_exists()
         return []
     except: return []
 
-# ---------------------------------------------------------
-# [關鍵修正] get_overall_summary: 加入自動修復機制
-# ---------------------------------------------------------
 def get_overall_summary() -> dict:
     try:
-        # 1. 使用 FT.SEARCH 進行統計
         res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
         res_serving = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{serving}", "LIMIT", "0", "0")
         res_done = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{done}", "LIMIT", "0", "0")
         res_cancelled = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{cancelled}", "LIMIT", "0", "0")
         
-        # 2. 讀取 Hash 統計
         total_issued = int(r.get("ticket:global:id") or 0)
         today_str = datetime.now().strftime("%Y%m%d")
         total_data = r.hgetall(f"stats:{today_str}:register:ALL")
@@ -250,47 +262,15 @@ def get_overall_summary() -> dict:
             "avg_wait_time_today": avg_wait,
             "error": None
         }
-    except redis.exceptions.ResponseError as e:
-        # [關鍵] 捕捉到 "No such index" 錯誤
-        if "no such index" in str(e).lower():
-            print("🔴 Index missing detected! Recreating...")
-            ensure_index_exists() # 嘗試重建索引
-            return {"error": "Index rebuilt. Please refresh.", "total_issued": 0}
-        
-        return {"error": f"RediSearch Error: {str(e)}", "total_issued": 0}
-    except Exception as e:
-        return {"error": f"Unknown: {str(e)}", "total_issued": 0}
+    except Exception as e: return {"error": str(e), "total_issued": 0}
 
-# ---------------------------------------------------------
-# get_hourly_demand: 取得時段熱度分析 (已修正 GMT+8 時區問題)
-# ---------------------------------------------------------
 def get_hourly_demand() -> list[dict]:
     try:
-        # [關鍵修正] @created_at 是 UTC 時間戳
-        # 台灣是 GMT+8，所以我們要加 8小時 (8 * 3600 = 28800 秒) 後再取餘數
-        raw = r.execute_command(
-            "FT.AGGREGATE", "idx:ticket", "*", 
-            "APPLY", "FLOOR(((@created_at + 28800) / 3600) % 24)", "AS", "hour", 
-            "GROUPBY", 1, "@hour", 
-            "REDUCE", "COUNT", 0, "AS", "total",
-            "SORTBY", 2, "@hour", "ASC"
-        )
-        
-        hourly_data = []
+        raw = r.execute_command("FT.AGGREGATE", "idx:ticket", "*", "APPLY", "FLOOR(((@created_at + 28800) / 3600) % 24)", "AS", "hour", "GROUPBY", 1, "@hour", "REDUCE", "COUNT", 0, "AS", "total", "SORTBY", 2, "@hour", "ASC")
+        data = []
         if raw and raw[0] > 0:
-            for i in range(1, len(raw)):
-                row = raw[i]
-                group_data = {}
-                for j in range(0, len(row), 2):
-                    group_data[row[j]] = row[j+1]
-                
-                hourly_data.append({
-                    "hour": int(group_data.get('@hour', group_data.get('hour', 0))),
-                    "count": int(group_data.get('total', 0))
-                })
-
-        return hourly_data
-    except redis.exceptions.ResponseError as e:
-        return {"error": "RediSearch Module Failure"}
-    except Exception as e:
-        return {"error": "Unknown backend error"}
+            for row in raw[1:]:
+                rd = {row[i]: row[i+1] for i in range(0, len(row), 2)}
+                data.append({"hour": int(rd.get('hour', 0)), "count": int(rd.get('total', 0))})
+        return data
+    except: return []
