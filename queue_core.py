@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 # ---------------------------------------------------------
-# [連線設定] 限制 max_connections=4
+# [連線設定]
 # ---------------------------------------------------------
 REDIS_URL = os.environ.get("REDIS_URL")
 
@@ -22,9 +22,7 @@ if REDIS_URL:
 else:
     r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
-# ---------------------------------------------------------
 # 自動確保索引存在
-# ---------------------------------------------------------
 def ensure_index_exists():
     try:
         r.execute_command(
@@ -75,11 +73,11 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
     }
 
 # ---------------------------------------------------------
-# [關鍵邏輯變更] call_next: 計算服務時間 (Service Time)
+# [邏輯修正] call_next: 計算第二位之後的等待時間
 # ---------------------------------------------------------
 def call_next(service: str, counter_name: str) -> dict | None:
     
-    # 1. 自動結案：將上一位 serving 改為 done
+    # 1. 自動結案
     try:
         query = f"@service:{service} @status:{{serving}}"
         res = r.execute_command("FT.SEARCH", "idx:ticket", query, "LIMIT", "0", "1000")
@@ -130,9 +128,9 @@ def call_next(service: str, counter_name: str) -> dict | None:
         number = r.hget(ticket_key, "number")
         r.set(current_key, number)
 
-        # ★★★ [新邏輯] 計算服務時間 (Service Duration) ★★★
-        # 邏輯：這次叫號時間 - 上次叫號時間 = 上一位客人的服務時間
-        last_activity_key = f"counter:last_activity:{service}:{counter_name}"
+        # ★★★ [等待時間計算邏輯] ★★★
+        # 邏輯：這次叫號時間 - 上次叫號時間 = 這次這位客人的「實際等待前一位的時間」
+        last_activity_key = f"counter:last_activity:{service}:ALL_GLOBAL" # 使用全域變數，不分櫃台，計算整體流速
         last_time = r.get(last_activity_key)
         
         # 更新最後活動時間為現在
@@ -143,22 +141,25 @@ def call_next(service: str, counter_name: str) -> dict | None:
         stats_service_key = f"stats:{today_str}:{service}:ALL"
         
         pipe = r.pipeline()
-        # 總叫號次數
+        # 總服務人數 +1
         pipe.hincrby(stats_key, "count", 1)
         pipe.hincrby(stats_service_key, "count", 1)
 
         if last_time:
-            duration = now - int(last_time)
-            # 只有當間隔小於 1 小時才計入 (避免午休拉壞平均)
-            if duration < 3600:
-                pipe.hincrby(stats_key, "total_svc_time", duration)
-                pipe.hincrby(stats_key, "svc_count", 1) # 有效服務次數
+            # 如果有「上一位叫號時間」，代表這不是今天第一位
+            # 計算間隔 (等待時間)
+            wait_duration = now - int(last_time)
+            
+            # 排除極端值 (例如開店前空窗，設定為 1 小時內才算有效連續服務)
+            if wait_duration < 3600:
+                pipe.hincrby(stats_key, "total_real_wait", wait_duration)
+                pipe.hincrby(stats_key, "wait_sample_count", 1) # 樣本數 +1
                 
-                pipe.hincrby(stats_service_key, "total_svc_time", duration)
-                pipe.hincrby(stats_service_key, "svc_count", 1)
+                pipe.hincrby(stats_service_key, "total_real_wait", wait_duration)
+                pipe.hincrby(stats_service_key, "wait_sample_count", 1)
         
         pipe.execute()
-        # ★★★ [新邏輯結束] ★★★
+        # ★★★ [邏輯結束] ★★★
 
         ticket_info = {
             "ticket_id": int(ticket_id),
@@ -222,10 +223,10 @@ def get_stats_for_date(date_str: str) -> list[dict]:
         _, _, service, counter = parts
         data = r.hgetall(key)
         
-        # [新邏輯] 改用 svc_count 計算平均
-        svc_cnt = int(data.get("svc_count", 0))
-        total_svc = int(data.get("total_svc_time", 0))
-        avg = total_svc / svc_cnt if svc_cnt > 0 else 0
+        # [新邏輯] 改用 wait_sample_count 計算平均
+        sample_cnt = int(data.get("wait_sample_count", 0))
+        total_wait = int(data.get("total_real_wait", 0))
+        avg = total_wait / sample_cnt if sample_cnt > 0 else 0
         
         results.append({
             "service": service, "counter": counter,
@@ -249,7 +250,7 @@ def get_live_queue_stats() -> list[dict]:
     except: return []
 
 # ---------------------------------------------------------
-# [關鍵修正] get_overall_summary: 改讀取 svc_time
+# [關鍵修正] get_overall_summary: 改讀取 total_real_wait / wait_sample_count
 # ---------------------------------------------------------
 def get_overall_summary() -> dict:
     try:
@@ -264,11 +265,12 @@ def get_overall_summary() -> dict:
         
         total_served = int(total_data.get("count", 0) or 0)
         
-        # [新邏輯] 讀取服務時長
-        total_svc_time = int(total_data.get("total_svc_time", 0) or 0)
-        svc_count = int(total_data.get("svc_count", 0) or 0)
+        # [新邏輯] 讀取真實等待時間總和 & 樣本數
+        total_real_wait = int(total_data.get("total_real_wait", 0) or 0)
+        wait_sample_count = int(total_data.get("wait_sample_count", 0) or 0)
         
-        avg_svc_time = total_svc_time / svc_count if svc_count > 0 else 0
+        # 平均值 = 總等待時間 / 有等待的人數 (排除第一位)
+        avg_real_wait = total_real_wait / wait_sample_count if wait_sample_count > 0 else 0
 
         return {
             "total_issued": total_issued,
@@ -277,14 +279,13 @@ def get_overall_summary() -> dict:
             "live_done": res_done[0] if res_done else 0,
             "live_cancelled": res_cancelled[0] if res_cancelled else 0,
             "total_served_today": total_served,
-            "avg_wait_time_today": avg_svc_time, 
+            "avg_wait_time_today": avg_real_wait, 
             "error": None
         }
     except Exception as e: return {"error": str(e), "total_issued": 0}
 
 def get_hourly_demand() -> list[dict]:
     try:
-        # [時區修正] +8 小時
         raw = r.execute_command("FT.AGGREGATE", "idx:ticket", "*", "APPLY", "FLOOR(((@created_at + 28800) / 3600) % 24)", "AS", "hour", "GROUPBY", 1, "@hour", "REDUCE", "COUNT", 0, "AS", "total", "SORTBY", 2, "@hour", "ASC")
         data = []
         if raw and raw[0] > 0:
