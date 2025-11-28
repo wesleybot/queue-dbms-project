@@ -1,0 +1,120 @@
+:root {
+  --bg-color: #f8f9fa;
+  --card-bg: #ffffff;
+  --text-primary: #2d3748;
+}
+body {
+  background-color: var(--bg-color);
+  font-family: "Noto Sans TC", sans-serif;
+  color: var(--text-primary);
+}
+
+/* Navbar */
+.navbar {
+  background: #1a202c !important; /* Dark theme for admin */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Cards */
+.admin-card {
+  border: none;
+  border-radius: 16px;
+  background: var(--card-bg);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  height: 100%;
+  overflow: hidden;
+}
+.card-header {
+  background: #fff;
+  border-bottom: 1px solid #edf2f7;
+  padding: 1rem 1.5rem;
+  font-weight: 700;
+  color: #4a5568;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Metric Boxes (頂部三個數據) */
+.metric-card {
+  border-left: 4px solid;
+  transition: transform 0.2s;
+}
+.metric-card:hover {
+  transform: translateY(-2px);
+}
+.metric-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.metric-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #2d3748;
+}
+
+/* Status Grid (排隊狀態) */
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  text-align: center;
+}
+.status-item {
+  padding: 1rem;
+  border-radius: 12px;
+  background: #f7fafc;
+}
+.status-label {
+  font-size: 0.85rem;
+  color: #718096;
+  margin-bottom: 0.25rem;
+}
+.status-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+/* Control Panel */
+.control-input {
+  border-radius: 8px;
+  padding: 0.6rem;
+  border: 1px solid #e2e8f0;
+}
+.btn-call {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #3182ce 0%, #2b6cb0 100%);
+  border: none;
+  color: white;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-call:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  color: white;
+}
+.btn-call:active {
+  transform: scale(0.98);
+}
+
+/* Log Box */
+.log-box {
+  background: #2d3748;
+  color: #48bb78; /* Terminal Green */
+  font-family: "Courier New", monospace;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  min-height: 120px;
+  margin-top: 1rem;
+}

@@ -1,0 +1,194 @@
+:root {
+  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --serving-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --bg-color: #f8f9fa;
+  --card-bg: #ffffff;
+  --text-main: #2d3748;
+  --text-muted: #718096;
+}
+
+body {
+  background-color: var(--bg-color);
+  font-family: "Noto Sans TC", sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Navbar */
+.navbar {
+  background: var(--card-bg);
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1rem;
+}
+
+/* [修改] 品牌連結樣式 */
+.brand-text {
+  font-weight: 700;
+  font-size: 1.25rem;
+  background: var(--primary-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-decoration: none; /* 移除連結底線 */
+  display: flex;
+  align-items: center;
+}
+
+/* 避免連結 hover 時變色或出現底線 */
+.brand-text:hover {
+  text-decoration: none;
+  opacity: 0.9;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+/* Queue Card */
+.queue-card {
+  border: none;
+  border-radius: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05),
+    0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  overflow: hidden;
+  background: var(--card-bg);
+  transition: transform 0.2s ease;
+  width: 100%;
+}
+
+.card-header-custom {
+  background: var(--primary-gradient);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: white;
+}
+
+.current-number-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+
+.current-number {
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.serving-mode .card-header-custom {
+  background: var(--serving-gradient);
+}
+.serving-mode .current-number {
+  animation: pulse 2s infinite;
+}
+
+/* Ticket Info Area */
+.ticket-section {
+  padding: 2rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.info-item {
+  background: #f7fafc;
+  padding: 1.2rem 1rem;
+  border-radius: 16px;
+  text-align: center;
+}
+.info-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.info-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* Status Badge */
+.status-pill {
+  display: inline-block;
+  padding: 0.6rem 2rem;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+}
+
+/* Buttons */
+.btn-action {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 16px;
+  border: none;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.btn-primary-custom {
+  background: var(--primary-gradient);
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.4);
+}
+.btn-primary-custom:active {
+  transform: scale(0.98);
+}
+.btn-outline-custom {
+  background: transparent;
+  border: 2px solid #e2e8f0;
+  color: var(--text-muted);
+  margin-top: 1rem;
+}
+
+/* QR Code */
+#qrcode-container {
+  background: white;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 2px dashed #e2e8f0;
+  width: fit-content;
+  margin: 0 auto 1rem auto;
+}
+
+/* Footer */
+.site-footer {
+  text-align: center;
+  padding: 1.5rem;
+  color: #a0aec0;
+  font-size: 0.85rem;
+  background-color: var(--bg-color);
+  margin-top: auto;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.hidden {
+  display: none !important;
+}
