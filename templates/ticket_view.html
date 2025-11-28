@@ -7,7 +7,6 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
-    <link rel="icon" type="image/x-icon" href="static/images/favicon.ico" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -24,7 +23,16 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="/static/css/ticket_view.css" />
+
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="{{ url_for('static', filename='images/favicon.ico') }}?v=2"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/ticket_view.css') }}?v=2"
+    />
   </head>
   <body>
     <nav class="navbar sticky-top">
@@ -40,32 +48,27 @@
             <div class="current-number-label">目前叫號 CURRENT</div>
             <div id="current-number" class="current-number">--</div>
           </div>
-
           <div class="ticket-body">
             <div class="my-number-box">
               <div class="my-number-label">我的號碼 YOUR NUMBER</div>
               <div id="my-number" class="my-number-value">--</div>
             </div>
-
             <div class="info-row">
               <span class="info-label">前面等待</span>
               <span class="info-val"><span id="ahead-count">--</span> 人</span>
             </div>
-
             <div class="info-row">
               <span class="info-label">狀態</span>
               <span id="status-badge" class="status-pill bg-light text-muted"
                 >載入中...</span
               >
             </div>
-
             <div id="counter-area" class="counter-alert">
               <div class="fw-bold mb-1">
                 <i class="fa-solid fa-bell fa-shake me-2"></i>請前往櫃台
               </div>
               <div id="counter-name" class="fs-4 fw-bold"></div>
             </div>
-
             <div class="mt-4 text-muted small opacity-75">
               <i class="fa-solid fa-rotate me-1"></i> 系統自動更新中...
             </div>
@@ -74,7 +77,17 @@
       </div>
     </main>
 
-    <footer class="site-footer">&copy; 2025 Queue Ticket System</footer>
-    <script src="{{ url_for('static', filename='js/ticket_view.js') }}?v=2"></script>
+    <footer class="site-footer">&copy; 2024 Queue Ticket System</footer>
+
+    <script>
+      // 1. 先在 HTML 裡定義變數 (這裡可以使用 Jinja2)
+      // 這樣外部的 JS 檔案就能讀取 window.SERVER_DATA 了
+      window.SERVER_DATA = {
+        ticketId: Number("{{ ticket_id }}"),
+        serviceName: "{{ service }}",
+      };
+    </script>
+
+    <script src="{{ url_for('static', filename='js/ticket_view.js') }}?v=3"></script>
   </body>
 </html>
