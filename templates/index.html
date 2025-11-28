@@ -1,105 +1,88 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="utf-8" />
-    <title>Queue System</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
-    />
+<head>
+  <meta charset="utf-8" />
+  <title>Queue System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="icon" type="image/x-icon" href="static/images/favicon.ico">
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
-      rel="stylesheet"
-    />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
 
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    <link rel="stylesheet" href="/static/css/index.css" />
-  </head>
-  <body>
-    <nav class="navbar sticky-top">
-      <div class="container d-flex justify-content-between align-items-center">
-        <a class="navbar-brand brand-text" href="/"> Queue System </a>
-        <a
-          href="/admin/login"
-          class="btn btn-sm btn-light rounded-pill px-3 fw-bold text-muted border"
-        >
-          <i class="fa-solid fa-lock me-1"></i> 管理員
-        </a>
-      </div>
-    </nav>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}?v=2" />
 
-    <main class="container">
-      <div class="col-12 col-md-8 col-lg-4">
-        <div id="main-card" class="queue-card">
-          <div class="card-header-custom">
-            <div class="current-number-label">目前叫號 CURRENT NUMBER</div>
-            <div id="current-number" class="current-number">-</div>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}?v=2" />
+</head>
+<body>
+  <nav class="navbar sticky-top">
+    <div class="container d-flex justify-content-between align-items-center">
+      <a class="navbar-brand brand-text" href="/"> Queue System </a>
+      <a href="/admin/login" class="btn btn-sm btn-light rounded-pill px-3 fw-bold text-muted border">
+        <i class="fa-solid fa-lock me-1"></i> 管理員
+      </a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="col-12 col-md-8 col-lg-4">
+      
+      <div id="main-card" class="queue-card">
+        <div class="card-header-custom">
+          <div class="current-number-label">目前叫號 CURRENT NUMBER</div>
+          <div id="current-number" class="current-number">-</div>
+        </div>
+
+        <div class="ticket-section text-center">
+          
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">我的號碼</div>
+              <div id="my-number" class="info-value">-</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">前面等待</div>
+              <div class="info-value">
+                <span id="ahead-count">-</span><span class="fs-6 ms-1 text-muted">人</span>
+              </div>
+            </div>
           </div>
 
-          <div class="ticket-section text-center">
-            <div class="info-grid">
-              <div class="info-item">
-                <div class="info-label">我的號碼</div>
-                <div id="my-number" class="info-value">-</div>
-              </div>
-              <div class="info-item">
-                <div class="info-label">前面等待</div>
-                <div class="info-value">
-                  <span id="ahead-count">-</span
-                  ><span class="fs-6 ms-1 text-muted">人</span>
-                </div>
-              </div>
-            </div>
-
-            <div id="status-badge" class="status-pill bg-light text-muted">
-              尚未取號
-            </div>
-
-            <div
-              id="counter-area"
-              class="alert alert-success border-0 rounded-4 mb-4 hidden"
-            >
-              <div class="fw-bold fs-5">
-                <i class="fa-solid fa-location-dot me-2"></i
-                ><span id="counter-name"></span>
-              </div>
-              <div class="small">請前往上述櫃台辦理</div>
-            </div>
-
-            <div id="qrcode-wrapper" class="hidden">
-              <div id="qrcode-container"><div id="qrcode"></div></div>
-              <div class="small text-muted mb-4">請出示此碼報到</div>
-            </div>
-
-            <button id="btn-take" class="btn-action btn-primary-custom">
-              <i class="fa-solid fa-plus"></i> 我要抽號
-            </button>
-
-            <button
-              id="btn-cancel"
-              class="btn-action btn-outline-custom hidden"
-            >
-              取消排隊
-            </button>
+          <div id="status-badge" class="status-pill bg-light text-muted">
+            尚未取號
           </div>
+
+          <div id="counter-area" class="alert alert-success border-0 rounded-4 mb-4 hidden">
+            <div class="fw-bold fs-5">
+              <i class="fa-solid fa-location-dot me-2"></i><span id="counter-name"></span>
+            </div>
+            <div class="small">請前往上述櫃台辦理</div>
+          </div>
+
+          <div id="qrcode-wrapper" class="hidden">
+            <div id="qrcode-container"><div id="qrcode"></div></div>
+            <div class="small text-muted mb-4">請出示此碼報到</div>
+          </div>
+
+          <button id="btn-take" class="btn-action btn-primary-custom">
+            <i class="fa-solid fa-plus"></i> 我要抽號
+          </button>
+
+          <button id="btn-cancel" class="btn-action btn-outline-custom hidden">
+            取消排隊
+          </button>
         </div>
       </div>
-    </main>
+      
+    </div>
+  </main>
 
-    <footer class="site-footer">&copy; 2024 Queue Ticket System</footer>
+  <footer class="site-footer">&copy; 2024 Queue Ticket System</footer>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="/static/js/index.js"></script>
-  </body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
+  <script src="{{ url_for('static', filename='js/index.js') }}?v=2"></script>
+</body>
 </html>
