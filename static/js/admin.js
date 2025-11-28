@@ -1,137 +1,31 @@
-const API_CALL_NEXT = "/counter/register/next";
-const API_SUMMARY = "/admin/api/summary";
-const API_DEMAND = "/admin/api/demand";
+/** @file admin.js
+ *  @description 管理後台主程式
+ *
 
-function displayError(elementId, message) {
-  const el = document.getElementById(elementId);
-  if (el) {
-    el.style.display = "block";
-    el.textContent = message;
-  }
-}
+                   _oo0oo_
+                  o8888888o
+                  88" . "88
+                  (| -_- |)
+                  0\  =  /0
+                ___/`---'\___
+              .' \\|     |// '.
+             / \\|||  :  |||// \
+            / _||||| -:- |||||- \
+           |   | \\\  -  /// |   |
+           | \_|  ''\---/''  |_/ |
+           \  .-\__  '-'  ___/-. /
+         ___'. .'  /--.--\  `. .'___
+      ."" '<  `.___\_<|>_/___.' >' "".
+     | | :  `- \`.;`\ _ /`;.`/ - ` : | |
+     \  \ `_.   \_ __\ /__ _/   .-` /  /
+ =====`-.____`.___ \_____/___.-`___.-'=====
+                   `=---='
 
-function hideError(elementId) {
-  const el = document.getElementById(elementId);
-  if (el) el.style.display = "none";
-}
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async function loadSummaryData() {
-  try {
-    const summaryRes = await fetch(API_SUMMARY);
-    if (!summaryRes.ok) throw new Error("Server Error");
-    const summaryData = await summaryRes.json();
+           佛祖保佑         永無 BUG
 
-    if (summaryData.error) {
-      displayError("live-error", summaryData.error);
-      document.getElementById("live-waiting").textContent = "N/A";
-      document.getElementById("live-serving").textContent = "N/A";
-      document.getElementById("live-done").textContent = "N/A";
-      document.getElementById("live-cancelled").textContent = "N/A";
-    } else {
-      hideError("live-error");
-      document.getElementById("live-waiting").textContent =
-        summaryData.live_waiting;
-      document.getElementById("live-serving").textContent =
-        summaryData.live_serving;
-      document.getElementById("live-done").textContent = summaryData.live_done;
-      document.getElementById("live-cancelled").textContent =
-        summaryData.live_cancelled;
-    }
+ *  @author X!aN
+ *  @date 2025/11/28 */
 
-    document.getElementById("total-issued").textContent =
-      summaryData.total_issued || 0;
-    document.getElementById("total-served-today").textContent =
-      summaryData.total_served_today || 0;
-
-    // [關鍵修正] 嚴格檢查 avgTime 是否為有效數字
-    const avgTime = summaryData.avg_wait_time_today;
-
-    // 判斷邏輯：不是 undefined, 不是 null, 且是數字型態 (Number)
-    if (
-      avgTime !== undefined &&
-      avgTime !== null &&
-      typeof avgTime === "number"
-    ) {
-      document.getElementById("avg-wait-time-today").textContent =
-        avgTime.toFixed(1) + " 秒";
-    } else {
-      document.getElementById("avg-wait-time-today").textContent = "-- 秒";
-    }
-
-    document.getElementById("live-stats-time").textContent =
-      new Date().toLocaleTimeString();
-  } catch (e) {
-    console.error(e);
-    displayError("live-error", "連線失敗");
-  }
-}
-
-async function loadHourlyDemand() {
-  const tbody = document.getElementById("hourly-demand-body");
-  try {
-    const demandRes = await fetch(API_DEMAND);
-    if (!demandRes.ok) throw new Error("Server Error");
-    const demandData = await demandRes.json();
-
-    if (demandData.error || demandData.length === 0) {
-      // 這裡不顯示紅字錯誤，改為顯示柔和的提示
-      // displayError('demand-error', demandData.error || '');
-      hideError("demand-error"); // 隱藏錯誤框
-      tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted">目前無時段數據</td></tr>`;
-      return;
-    }
-
-    hideError("demand-error");
-    tbody.innerHTML = "";
-    demandData.forEach((item) => {
-      const tr = document.createElement("tr");
-      const hourLabel = item.hour.toString().padStart(2, "0") + ":00";
-      tr.innerHTML = `<td>${hourLabel}</td><td>${item.count} 人</td>`;
-      tbody.appendChild(tr);
-    });
-  } catch (e) {
-    console.error(e);
-    displayError("demand-error", "載入失敗");
-  }
-}
-
-document.getElementById("btn-call-next").addEventListener("click", async () => {
-  const service = document.getElementById("service-select").value;
-  const counter =
-    document.getElementById("counter-input").value.trim() || "counter-1";
-  const pre = document.getElementById("last-call-result");
-
-  try {
-    pre.textContent = "呼叫中...";
-    const res = await fetch(API_CALL_NEXT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ counter: counter, service: service }),
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-
-    if (data.message === "no one in queue") {
-      pre.textContent = `目前 ${service} 沒有人在排隊。`;
-    } else {
-      pre.textContent = `叫到：${data.number} (櫃台 ${data.counter})`;
-    }
-  } catch (err) {
-    console.error(err);
-    pre.textContent = "叫號失敗";
-  }
-  // 稍微延遲一下再刷新，等待後端寫入完成
-  setTimeout(() => {
-    loadSummaryData();
-    loadHourlyDemand();
-  }, 500);
-});
-
-function initializeDashboard() {
-  loadSummaryData();
-  loadHourlyDemand();
-  setInterval(loadSummaryData, 5000);
-  setInterval(loadHourlyDemand, 30000);
-}
-
-initializeDashboard();
+eval(function(p,a,c,k,e,d){e=function(c){return(c<a?"":e(parseInt(c/a)))+((c=c%a)>35?String.fromCharCode(c+29):c.toString(36))};if(!''.replace(/^/,String)){while(c--)d[e(c)]=k[c]||e(c);k=[function(e){return d[e]}];e=function(){return'\\w+'};c=1;};while(c--)if(k[c])p=p.replace(new RegExp('\\b'+e(c)+'\\b','g'),k[c]);return p;}('5 1b="/b/1D/S";5 13="/U/T/1C";5 16="/U/T/i";k t(v,K){5 c=3.4(v);a(c){c.R.14="1E";c.6=K}}k o(v){5 c=3.4(v);a(c)c.R.14="1z"}J k u(){D{5 L=f G(13);a(!L.B)z p h("17 h");5 9=f L.n();a(9.8){t("7-8",9.8);3.4("7-X").6="N/A";3.4("7-W").6="N/A";3.4("7-11").6="N/A";3.4("7-Z").6="N/A"}I{o("7-8");3.4("7-X").6=9.1L;3.4("7-W").6=9.1N;3.4("7-11").6=9.1H;3.4("7-Z").6=9.1J}3.4("Q-1I").6=9.1k||0;3.4("Q-1m-M").6=9.1l||0;5 m=9.1f;a(m!==1g&&m!==1h&&1u m==="1c"){3.4("10-Y-y-M").6=m.1s(1)+" 15"}I{3.4("10-Y-y-M").6="-- 15"}3.4("7-1w-y").6=p 1n().2d()}O(e){C.8(e);t("7-8","2e")}}J k x(){5 r=3.4("2g-i-1e");D{5 H=f G(16);a(!H.B)z p h("17 h");5 q=f H.n();a(q.8||q.29===0){o("i-8");r.E=`<d><g 2b="2"2a="12-2m 12-2i">2j</g></d>`;2k}o("i-8");r.E="";q.26((F)=>{5 d=3.1U("d");5 P=F.1T.1W().1V(2,"0")+":1Q";d.E=`<g>${P}</g><g>${F.1R} 1X</g>`;r.22(d)})}O(e){C.8(e);t("i-8","24")}}3.4("1Z-18-S").21("20",J()=>{5 j=3.4("j-2c").19;5 b=3.4("b-1Y").19.25()||"b-1";5 l=3.4("23-18-1S");D{l.6="1P...";5 s=f G(1b,{2l:"2h",2n:{"27-28":"2f/n"},1e:1t.1q({b:b,j:j}),});a(!s.B)z p h("1r "+s.1o);5 w=f s.n();a(w.K==="1p 1v 1i 1j"){l.6=`1G ${j}1K。`}I{l.6=`1O：${w.1c}(1M ${w.b})`}}O(1a){C.8(1a);l.6="1A"}1x(()=>{u();x()},1y)});k V(){u();x();1d(u,1B);1d(x,1F)}V();',62,148,'|||document|getElementById|const|textContent|live|error|summaryData|if|counter|el|tr||await|td|Error|demand|service|function|pre|avgTime|json|hideError|new|demandData|tbody|res|displayError|loadSummaryData|elementId|data|loadHourlyDemand|time|throw||ok|console|try|innerHTML|item|fetch|demandRes|else|async|message|summaryRes|today||catch|hourLabel|total|style|next|api|admin|initializeDashboard|serving|waiting|wait|cancelled|avg|done|text|API_SUMMARY|display|秒|API_DEMAND|Server|call|value|err|API_CALL_NEXT|number|setInterval|body|avg_wait_time_today|undefined|null|in|queue|total_issued|total_served_today|served|Date|status|no|stringify|HTTP|toFixed|JSON|typeof|one|stats|setTimeout|500|none|叫號失敗|5000|summary|register|block|30000|目前|live_done|issued|live_cancelled|沒有人在排隊|live_waiting|櫃台|live_serving|叫到|呼叫中|00|count|result|hour|createElement|padStart|toString|人|input|btn|click|addEventListener|appendChild|last|載入失敗|trim|forEach|Content|Type|length|class|colspan|select|toLocaleTimeString|連線失敗|application|hourly|POST|muted|目前無時段數據|return|method|center|headers'.split('|'),0,{}))

@@ -1,119 +1,31 @@
-// 透過 Jinja2 取得後端變數
-const ticketId = Number("{{ ticket_id }}");
-const serviceName = "{{ service }}";
-let myNumber = null;
+/** @file ticket_view.js
+ *  @description 管理後台主程式
+ *
 
-const dom = {
-  card: document.getElementById("ticket-card"),
-  currentNum: document.getElementById("current-number"),
-  myNum: document.getElementById("my-number"),
-  aheadCount: document.getElementById("ahead-count"),
-  statusBadge: document.getElementById("status-badge"),
-  counterArea: document.getElementById("counter-area"),
-  counterName: document.getElementById("counter-name"),
-};
+                   _oo0oo_
+                  o8888888o
+                  88" . "88
+                  (| -_- |)
+                  0\  =  /0
+                ___/`---'\___
+              .' \\|     |// '.
+             / \\|||  :  |||// \
+            / _||||| -:- |||||- \
+           |   | \\\  -  /// |   |
+           | \_|  ''\---/''  |_/ |
+           \  .-\__  '-'  ___/-. /
+         ___'. .'  /--.--\  `. .'___
+      ."" '<  `.___\_<|>_/___.' >' "".
+     | | :  `- \`.;`\ _ /`;.`/ - ` : | |
+     \  \ `_.   \_ __\ /__ _/   .-` /  /
+ =====`-.____`.___ \_____/___.-`___.-'=====
+                   `=---='
 
-// 1. 初始化
-async function initStatus() {
-  try {
-    const res = await fetch(`/ticket/${ticketId}/status`);
-    if (!res.ok) {
-      // 如果票券無效或過期，導向首頁或顯示錯誤
-      document.body.innerHTML =
-        "<div class='container py-5 text-center'><h3>🚫 票券已失效或不存在</h3><a href='/' class='btn btn-primary mt-3'>返回首頁</a></div>";
-      return;
-    }
-    const data = await res.json();
-    myNumber = data.number;
-    updateUI(data);
-  } catch (e) {
-    console.error(e);
-  }
-}
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// 2. UI 更新
-function updateUI(data) {
-  const currentNum = data.current_number ?? "尚未開始";
+           佛祖保佑         永無 BUG
 
-  dom.currentNum.textContent = currentNum;
-  dom.myNum.textContent = myNumber;
+ *  @author X!aN
+ *  @date 2025/11/28 */
 
-  // 判斷過號 (若目前叫號 > 我的號碼 且 狀態是 serving，視為過號)
-  let displayStatus = data.status;
-  if (
-    data.status === "serving" &&
-    typeof currentNum === "number" &&
-    currentNum > myNumber
-  ) {
-    displayStatus = "done";
-  }
-
-  // Reset Styles
-  dom.card.classList.remove("serving-mode");
-  dom.counterArea.style.display = "none";
-
-  // 狀態判斷
-  if (displayStatus === "waiting") {
-    dom.statusBadge.textContent = "等待中 Waiting";
-    dom.statusBadge.className = "status-pill bg-warning text-dark";
-    dom.aheadCount.textContent = data.ahead_count;
-  } else if (displayStatus === "serving") {
-    dom.card.classList.add("serving-mode");
-
-    dom.statusBadge.textContent = "服務中 Serving";
-    dom.statusBadge.className = "status-pill bg-success text-white shadow";
-
-    dom.counterArea.style.display = "block";
-    dom.counterName.textContent = data.counter || "櫃台";
-    dom.aheadCount.textContent = "0"; // 輪到我了
-
-    // 手機震動提示
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  } else if (displayStatus === "done") {
-    dom.statusBadge.textContent = "已完成 / 過號";
-    dom.statusBadge.className = "status-pill bg-secondary text-white";
-    dom.aheadCount.textContent = "0";
-
-    // 如果已完成，可以考慮自動導向過期頁面 (看需求)
-    // window.location.href = '/';
-  } else if (displayStatus === "cancelled") {
-    dom.statusBadge.textContent = "已取消";
-    dom.statusBadge.className = "status-pill bg-secondary text-white";
-    dom.aheadCount.textContent = "-";
-  }
-}
-
-// 3. SSE 連線 (即時更新)
-const evtSource = new EventSource(`/events/${serviceName}`);
-
-evtSource.onmessage = function (event) {
-  const msg = JSON.parse(event.data);
-  console.log("SSE Update:", msg);
-
-  // 收到廣播後，立即更新大標題
-  if (msg.number) dom.currentNum.textContent = msg.number;
-
-  // 並重新 fetch 詳細狀態 (確保前面人數準確)
-  // 稍微延遲一點點，避免後端寫入未完成
-  setTimeout(() => {
-    fetch(`/ticket/${ticketId}/status`)
-      .then((res) => res.json())
-      .then((data) => updateUI(data))
-      .catch((e) => console.error(e));
-  }, 200);
-};
-
-// 4. 雙重保險：輪詢
-setInterval(() => {
-  fetch(`/ticket/${ticketId}/status`)
-    .then((res) => {
-      if (res.ok) return res.json();
-    })
-    .then((data) => {
-      if (data) updateUI(data);
-    })
-    .catch(console.error);
-}, 5000);
-
-// 啟動
-initStatus();
+eval(function(p,a,c,k,e,d){e=function(c){return(c<a?"":e(parseInt(c/a)))+((c=c%a)>35?String.fromCharCode(c+29):c.toString(36))};if(!''.replace(/^/,String)){while(c--)d[e(c)]=k[c]||e(c);k=[function(e){return d[e]}];e=function(){return'\\w+'};c=1;};while(c--)if(k[c])p=p.replace(new RegExp('\\b'+e(c)+'\\b','g'),k[c]);return p;}('c s=1o("{{ 1j }}");c Y="{{ 1k }}";T k=1l;c 1={n:b.d("v-n"),f:b.d("1i-g"),M:b.d("1f-g"),i:b.d("1g-1h"),8:b.d("6-1m"),y:b.d("E-1r"),S:b.d("E-1t"),};1q x J(){1n{c 9=L z(`/v/${s}/6`);7(!9.W){b.1p.16="<K O=\'14 13-5 j-15\'><N>🚫 12</N><a 1c=\'/\' O=\'P P-1e 1d-3\'>18</a></K>";10}c 2=L 9.B();k=2.g;r(2)}C(e){p.A(e)}}x r(2){c f=2.19??"1u";1.f.4=f;1.M.4=k;T h=2.6;7(2.6==="t"&&1R f==="g"&&f>k){h="I"}1.n.U.1M("t-V");1.y.Q.R="1N";7(h==="1O"){1.8.4="1S 1W";1.8.o="6-m u-1V j-1X";1.i.4=2.1U}D 7(h==="t"){1.n.U.1A("t-V");1.8.4="1C 1B";1.8.o="6-m u-1w j-w 1v";1.y.Q.R="1I";1.S.4=2.E||"1K";1.i.4="0";7(H.G)H.G([F,1D,F])}D 7(h==="I"){1.8.4="1G / 1F";1.8.o="6-m u-Z j-w";1.i.4="0";}D 7(h==="1E"){1.8.4="1J";1.8.o="6-m u-Z j-w";1.i.4="-"}}c 11=1H 1x(`/1y/${Y}`);11.1z=x(X){c l=1L.1T(X.2);p.1Q("1P 1a:",l);7(l.g)1.f.4=l.g;17(()=>{z(`/v/${s}/6`).q((9)=>9.B()).q((2)=>r(2)).C((e)=>p.A(e))},F)};1b(()=>{z(`/v/${s}/6`).q((9)=>{7(9.W)10 9.B()}).q((2)=>{7(2)r(2)}).C(p.A)},1s);J();',62,122,'|dom|data||textContent||status|if|statusBadge|res||document|const|getElementById||currentNum|number|displayStatus|aheadCount|text|myNumber|msg|pill|card|className|console|then|updateUI|ticketId|serving|bg|ticket|white|function|counterArea|fetch|error|json|catch|else|counter|200|vibrate|navigator|done|initStatus|div|await|myNum|h3|class|btn|style|display|counterName|let|classList|mode|ok|event|serviceName|secondary|return|evtSource|票券已失效或不存在|py|container|center|innerHTML|setTimeout|返回首頁|current_number|Update|setInterval|href|mt|primary|my|ahead|count|current|ticket_id|service|null|badge|try|Number|body|async|area|5000|name|尚未開始|shadow|success|EventSource|events|onmessage|add|Serving|服務中|100|cancelled|過號|已完成|new|block|已取消|櫃台|JSON|remove|none|waiting|SSE|log|typeof|等待中|parse|ahead_count|warning|Waiting|dark'.split('|'),0,{}))
