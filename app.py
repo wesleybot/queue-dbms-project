@@ -282,12 +282,20 @@ def admin_home():
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
+    error = None
     if request.method == "POST":
-        if request.form.get("username") == "admin" and request.form.get("password") == "1234":
+        # [修改] 改從環境變數讀取，如果沒設定則使用預設值 "admin" / "1234"
+        # 這樣在本地測試沒 .env 也不會壞，但在雲端可以設強密碼
+        env_username = os.environ.get("ADMIN_USERNAME", "你不要看我")
+        env_password = os.environ.get("ADMIN_PASSWORD", "1234")
+
+        if request.form.get("username") == env_username and request.form.get("password") == env_password:
             session["admin_logged_in"] = True
-            session["admin_name"] = "admin"
+            session["admin_name"] = env_username
             return redirect("/admin")
-    return render_template("login.html")
+        else:
+            error = "帳號或密碼錯誤"
+    return render_template("login.html", error=error)
 
 @app.route("/admin/logout")
 def admin_logout():
