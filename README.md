@@ -6,16 +6,15 @@
 ![Deployment](https://img.shields.io/badge/Deploy-Render%20%2B%20Cloudflare-orange.svg?style=flat&logo=render&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Active-success.svg)
 
-> **🎓 113學年度第一學期 資料庫系統應用 期末專題報告**
+> **114學年度第一學期 資料庫管理 個人小專題**
 >
-> * **系級：** [你的系級]
-> * **學號：** [你的學號]
-> * **姓名：** [你的姓名]
+> * **系級：** 資訊管理系
+> * **學號：** 11346064
 > * **Live Demo:** [https://queue.xiandbms.ggff.net](https://queue.xiandbms.ggff.net)
 
 ---
 
-## 📖 1. 緒論 (Introduction)
+## 1. 緒論 (Introduction)
 
 ### 1.1 研究背景
 在熱門店家或服務場所，傳統的實體排隊方式不僅造成現場擁擠，更讓顧客陷入漫長的「盲目等待」。實體叫號機硬體成本高昂且消耗紙張，不符合現代 ESG 環保趨勢。
@@ -30,7 +29,7 @@
 
 ---
 
-## 💻 2. 作品介紹 (Project Overview)
+## 2. 作品介紹 (Project Overview)
 
 ### 2.1 系統架構 (System Architecture)
 本系統採用 **雲端原生 (Cloud Native)** 的分離式架構，確保高可用性與安全性。
@@ -47,13 +46,13 @@
 4.  **通知：** 使用者收到 LINE 推播與網頁震動提醒，前往櫃台。
 
 ### 2.3 作品亮點 (Highlights)
-* **🔐 Token 雙重驗證機制：** 解決了 LINE 跳轉瀏覽器時 Session 遺失的問題，並防止惡意使用者透過修改網址 ID 偷看他人票券。
-* **🤖 智慧自動結案：** 解決了「櫃台忘記按結束」導致系統卡死的問題。當呼叫下一位時，系統會自動搜尋並結案上一位 `Serving` 的顧客。
-* **📡 廣播器架構 (Broadcaster Pattern)：** 為解決 Redis 免費版連線數限制，實作了全域廣播器，僅使用 **1 條** Redis 監聽連線即可服務大量前端使用者。
+* **Token 雙重驗證機制：** 解決了 LINE 跳轉瀏覽器時 Session 遺失的問題，並防止惡意使用者透過修改網址 ID 偷看他人票券。
+* **智慧自動結案：** 解決了「櫃台忘記按結束」導致系統卡死的問題。當呼叫下一位時，系統會自動搜尋並結案上一位 `Serving` 的顧客。
+* **廣播器架構 (Broadcaster Pattern)：** 為解決 Redis 免費版連線數限制，實作了全域廣播器，僅使用 **1 條** Redis 監聽連線即可服務大量前端使用者。
 
 ---
 
-## ⚡ 3. 引用技術 (Technologies)
+## 3. 引用技術 (Technologies)
 
 本專案深入應用了 **6 項** Redis 進階功能，解決了傳統 SQL 資料庫難以處理的痛點：
 
@@ -70,22 +69,19 @@
 
 ---
 
-## 📊 4. 系統展示 (Screenshots)
+## 4. 系統展示 (Screenshots)
 
 ### 使用者端 (RWD Design)
 極簡設計，支援 QR Code 掃描與即時狀態更新。
 
 | 取號首頁 | 排隊中 (即時跳號) | 叫號通知 (服務中) |
 | :---: | :---: | :---: |
-| ![Home](static/images/demo_mobile_1.png) | ![Waiting](static/images/demo_mobile_2.png) | ![Serving](static/images/demo_mobile_3.png) |
+| ![Home](static/images/取號首頁.png) | ![Waiting](static/images/排隊中.png) | ![Serving](static/images/叫號通知.png) |
 
 ### 管理後台 (Dashboard)
 結合 RediSearch 聚合查詢，即時顯示等待人數、服務狀態與時段熱度分析。
 
-![Admin Dashboard](static/images/demo_admin_dashboard.png)
-
-*(註：請將您的截圖放入 `static/images/` 資料夾)*
-
+![Admin Dashboard](static/images/管理後台.png)
 ---
 
 ## 🛠️ 5. 安裝與執行 (Installation)
@@ -122,14 +118,14 @@
 
 本專案成功展示了如何利用 **NoSQL (Redis)** 的特性來構建一個高併發、低延遲的現代化應用。透過 **Streams** 做佇列、**Pub/Sub** 做通知、**RediSearch** 做分析，我們證明了 Redis 不僅僅是一個快取工具，更是構建即時系統的核心引擎。
 
-在開發過程中，我們克服了 **Redis 連線數限制**（透過廣播器模式解決）、**SSL 相容性問題** 以及 **Cloudflare WAF 誤擋** 等挑戰，最終交付了一個穩定且安全的雲端服務。
+在開發過程中，我克服了 **Redis 連線數限制**（透過廣播器模式解決）、**SSL 相容性問題** 以及 **Cloudflare WAF 誤擋** 等挑戰，最終交付了一個穩定且安全的雲端服務。
 
 ---
 
 ### 🔗 附件與連結
 
 * **Live Demo:** [https://queue.xiandbms.ggff.net](https://queue.xiandbms.ggff.net)
-* **GitHub:** [https://github.com/[你的帳號]/queue-dbms-project](https://github.com/[你的帳號]/queue-dbms-project)
+* **GitHub:** [https://github.com/wesleybot/queue-dbms-project](https://github.com/wesleybot/queue-dbms-project)
 
 ---
-© 2024 Queue Ticket System Project. All Rights Reserved.
+© 2025 X!aN Queue Ticket System Project. All Rights Reserved.
