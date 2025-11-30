@@ -141,7 +141,7 @@ def handle_push_notification(ticket_data):
 
     if line_user_id and line_bot_api:
         print(f"🔔 [Push] Sending to {line_user_id}", flush=True)
-        push_text = f"📢 號碼到囉！\n\n您的號碼：{number}\n請前往：{counter}"
+        push_text = f"【@通知 輪到您了】號碼到囉！\n\n您的號碼：{number}\n請前往：{counter}"
         try:
             line_bot_api.push_message(line_user_id, TextSendMessage(text=push_text))
         except Exception:
@@ -192,7 +192,7 @@ def handle_line_message(event):
     user_id = event.source.user_id
     text = event.message.text.strip()
 
-    if text in ["我要抽號", "抽號", "取號", "我要取號"]:
+    if text in ["!我要抽號", "抽號", "取號", "我要取號"]:
         bound = get_line_user_ticket(user_id)
         is_actually_waiting = False
         if bound:
@@ -213,7 +213,7 @@ def handle_line_message(event):
 
         if is_actually_waiting:
             st = get_ticket_status(bound["ticket_id"])
-            msg = f"您已在排隊中！\n號碼：{st['number']}\n前面：{st['ahead_count']} 人"
+            msg = f"您已在排隊中！\n您的號碼：{st['number']}\n前面還有：{st['ahead_count']} 人"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
         else:
             ticket = create_ticket("register", line_user_id=user_id)
@@ -230,10 +230,10 @@ def handle_line_message(event):
             
             # 使用統一網址 + Token
             view_url = f"{BASE_URL}/ticket/{ticket['ticket_id']}/view?token={ticket_token}"
-            msg = f"🎉 取號成功！\n號碼：{ticket['number']}\n\n線上進度：\n{view_url}"
+            msg = f"【@通知 取號成功】\n您的號碼：{ticket['number']}\n\n查詢線上進度：\n{view_url}"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
 
-    elif text in ["查詢", "查詢進度"]:
+    elif text in ["查詢", "!查詢目前排隊進度"]:
         bound = get_line_user_ticket(user_id)
         if bound:
             status = get_ticket_status(bound["ticket_id"])
@@ -246,27 +246,27 @@ def handle_line_message(event):
                 is_passed = (status["status"] == "serving" and current_num > my_num)
                 
                 if status["status"] == "waiting":
-                    msg = f"📊 排隊狀態：\n- 目前叫到：{current_num}\n- 您的號碼：{my_num}\n- 前面還有：{status['ahead_count']} 人"
+                    msg = f"【@通知 排隊狀態】：\n- 目前叫到：{current_num}\n- 您的號碼：{my_num}\n- 前面還有：{status['ahead_count']} 人"
                 elif status["status"] == "serving" and not is_passed:
-                    msg = f"🔔 您的號碼 {my_num} 正在服務中！\n請前往櫃台: {status['counter']}"
+                    msg = f"【@通知 您正在服務中】您的號碼： {my_num} \n請儘速前往櫃台: {status['counter']}"
                 else:
                     clear_line_user_ticket(user_id)
-                    msg = f"您的號碼 {my_num} 服務已結束或已過號 (目前叫到：{current_num})。\n若需重新排隊，請輸入「我要抽號」。"
+                    msg = f"【@通知 服務結束或已過號】\n您的號碼： {my_num} \n目前叫到：{current_num}。\n若需重新排隊，請點取選單或輸入「我要抽號」。"
         else:
             service = "register"
             current_num = r.get(f"current_number:{service}")
             current_num = int(current_num) if current_num else "尚未開始"
-            msg = f"您目前沒有取號。\n目前大廳叫號：{current_num}\n若要加入排隊，請輸入「我要抽號」。"
+            msg = f"【@通知 尚未取號】\n目前大廳叫號：{current_num}\n若要加入排隊，請點取選單或輸入「我要抽號」。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
 
-    elif text in ["取消", "取消排隊"]:
+    elif text in ["取消", "!取消排隊"]:
         bound = get_line_user_ticket(user_id)
         if bound:
             cancel_ticket(bound["ticket_id"])
             clear_line_user_ticket(user_id)
-            msg = "已取消排隊。"
+            msg = "【@通知 已取消排隊】"
         else:
-            msg = "您沒有排隊喔。"
+            msg = "【@通知 您沒有排隊】"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
 
 # ------------------ 前端與 API 路由 ------------------
