@@ -6,9 +6,8 @@ import redis
 import uuid
 from datetime import datetime
 
-# ---------------------------------------------------------
-# [連線設定]
-# ---------------------------------------------------------
+
+# 連線設定
 REDIS_URL = os.environ.get("REDIS_URL")
 
 if REDIS_URL:
@@ -29,16 +28,14 @@ def ensure_index_exists():
             "FT.CREATE", "idx:ticket", "ON", "HASH", "PREFIX", "1", "ticket:",
             "SCHEMA", "service", "TEXT", "status", "TAG", "created_at", "NUMERIC", "SORTABLE"
         )
-        print("✅ Index 'idx:ticket' created successfully.")
+        print("Index 'idx:ticket' created successfully.")
     except redis.exceptions.ResponseError as e:
         if "Index already exists" not in str(e):
-            print(f"⚠️ Index creation failed: {e}")
+            print(f"Index creation failed: {e}")
 
 ensure_index_exists()
 
-# ---------------------------------------------------------
 # create_ticket
-# ---------------------------------------------------------
 def create_ticket(service: str, line_user_id: str = "") -> dict:
     pipe = r.pipeline()
     ticket_id = r.incr("ticket:global:id")
@@ -72,9 +69,7 @@ def create_ticket(service: str, line_user_id: str = "") -> dict:
         "token": access_token
     }
 
-# ---------------------------------------------------------
-# [邏輯修正] call_next: 計算第二位之後的等待時間
-# ---------------------------------------------------------
+# call_next: 計算第二位之後的等待時間
 def call_next(service: str, counter_name: str) -> dict | None:
     
     # 1. 自動結案
@@ -128,8 +123,8 @@ def call_next(service: str, counter_name: str) -> dict | None:
         number = r.hget(ticket_key, "number")
         r.set(current_key, number)
 
-        # ★★★ [等待時間計算邏輯] ★★★
-        # 邏輯：這次叫號時間 - 上次叫號時間 = 這次這位客人的「實際等待前一位的時間」
+        # 等待時間計算邏輯
+        # 邏輯是：這次叫號時間 - 上次叫號時間 = 這次這位客人的「實際等待前一位的時間」
         last_activity_key = f"counter:last_activity:{service}:ALL_GLOBAL" # 使用全域變數，不分櫃台，計算整體流速
         last_time = r.get(last_activity_key)
         
@@ -159,7 +154,7 @@ def call_next(service: str, counter_name: str) -> dict | None:
                 pipe.hincrby(stats_service_key, "wait_sample_count", 1)
         
         pipe.execute()
-        # ★★★ [邏輯結束] ★★★
+        # 邏輯結束
 
         ticket_info = {
             "ticket_id": int(ticket_id),
@@ -223,7 +218,7 @@ def get_stats_for_date(date_str: str) -> list[dict]:
         _, _, service, counter = parts
         data = r.hgetall(key)
         
-        # [新邏輯] 改用 wait_sample_count 計算平均
+        # 新邏輯-> 改用 wait_sample_count 計算平均
         sample_cnt = int(data.get("wait_sample_count", 0))
         total_wait = int(data.get("total_real_wait", 0))
         avg = total_wait / sample_cnt if sample_cnt > 0 else 0
@@ -249,9 +244,7 @@ def get_live_queue_stats() -> list[dict]:
         return []
     except: return []
 
-# ---------------------------------------------------------
-# [關鍵修正] get_overall_summary: 改讀取 total_real_wait / wait_sample_count
-# ---------------------------------------------------------
+# get_overall_summary: 改讀取 total_real_wait / wait_sample_count
 def get_overall_summary() -> dict:
     try:
         res_waiting = r.execute_command("FT.SEARCH", "idx:ticket", "@status:{waiting}", "LIMIT", "0", "0")
@@ -265,7 +258,7 @@ def get_overall_summary() -> dict:
         
         total_served = int(total_data.get("count", 0) or 0)
         
-        # [新邏輯] 讀取真實等待時間總和 & 樣本數
+        # 新邏輯-> 讀取真實等待時間總和 & 樣本數
         total_real_wait = int(total_data.get("total_real_wait", 0) or 0)
         wait_sample_count = int(total_data.get("wait_sample_count", 0) or 0)
         

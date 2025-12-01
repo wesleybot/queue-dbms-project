@@ -4,7 +4,7 @@ import json
 import threading
 import queue
 import redis
-import uuid # [新增] 為了在 app.py 這端也能補救 Token
+import uuid # 新增-> 為了在 app.py 這端也能補救 Token
 from flask import (
     Flask, request, jsonify, send_file,
     url_for, Response, render_template, session, redirect, abort
@@ -31,7 +31,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = "dev-secret-key-change-me"
 
-# ★★★ 設定統一的網域 ★★★
+# 設定網域
 BASE_URL = "https://queue.xiandbms.ggff.net"
 
 # 環境變數
@@ -73,9 +73,7 @@ def clear_line_user_ticket(user_id: str):
     key = f"line_user:{user_id}"
     r.delete(key)
 
-# ============================================================
-# 🔥 [核心架構] 廣播系統 (Message Announcer)
-# ============================================================
+# 核心架構 廣播系統 (Message Announcer)
 class MessageAnnouncer:
     def __init__(self):
         self.listeners = []
@@ -107,7 +105,7 @@ def redis_listener_worker():
     pubsub = pubsub_r.pubsub()
     pubsub.psubscribe("channel:queue_update:*")
     
-    print("🟢 [System] Global Redis Listener Started (Multiplexing Mode)", flush=True)
+    print("[System] Global Redis Listener Started (Multiplexing Mode)", flush=True)
 
     for message in pubsub.listen():
         if message["type"] == "pmessage":
@@ -122,7 +120,7 @@ def redis_listener_worker():
                 ticket_data = json.loads(data_str)
                 handle_push_notification(ticket_data)
             except Exception as e:
-                print(f"🔴 Push Error: {e}", flush=True)
+                print(f"Push Error: {e}", flush=True)
 
 def handle_push_notification(ticket_data):
     ticket_id = ticket_data["ticket_id"]
@@ -140,7 +138,7 @@ def handle_push_notification(ticket_data):
     line_user_id = ticket_detail.get("line_user_id")
 
     if line_user_id and line_bot_api:
-        print(f"🔔 [Push] Sending to {line_user_id}", flush=True)
+        print(f"[Push] Sending to {line_user_id}", flush=True)
         push_text = f"【@通知 輪到您了】號碼到囉！\n\n您的號碼：{number}\n請前往：{counter}"
         try:
             line_bot_api.push_message(line_user_id, TextSendMessage(text=push_text))
@@ -152,9 +150,7 @@ if not any(t.name == "GlobalRedisListener" for t in threading.enumerate()):
     t = threading.Thread(target=redis_listener_worker, daemon=True, name="GlobalRedisListener")
     t.start()
 
-# ============================================================
 # SSE 路由
-# ============================================================
 @app.route("/events/<service>")
 def events(service):
     def stream():
@@ -219,12 +215,12 @@ def handle_line_message(event):
             ticket = create_ticket("register", line_user_id=user_id)
             bind_line_user_to_ticket(user_id, ticket["ticket_id"], ticket["service"])
             
-            # [關鍵修正] 防呆處理：如果 ticket 字典裡沒有 token，我們現場補救一個
+            # 防呆處理：如果 ticket 字典裡沒有 token，我們現場補救一個
             # 這樣就算 queue_core.py 沒更新成功，這裡也不會報錯
             ticket_token = ticket.get('token')
             if not ticket_token:
                 ticket_token = str(uuid.uuid4()) # 補救措施
-                print(f"⚠️ Warning: Token missing in create_ticket response. Generated fallback: {ticket_token}")
+                print(f"Warning: Token missing in create_ticket response. Generated fallback: {ticket_token}")
                 # 嘗試補寫回 Redis (非必要，但保險)
                 r.hset(f"ticket:{ticket['ticket_id']}", "token", ticket_token)
             
@@ -284,7 +280,7 @@ def admin_home():
 def admin_login():
     error = None
     if request.method == "POST":
-        # [修改] 改從環境變數讀取，如果沒設定則使用預設值 "admin" / "1234"
+        # 改從環境變數讀取，如果沒設定則使用預設值 "???" / "???"
         # 這樣在本地測試沒 .env 也不會壞，但在雲端可以設強密碼
         env_username = os.environ.get("ADMIN_USERNAME", "你不要看我")
         env_password = os.environ.get("ADMIN_PASSWORD", "1234")
@@ -332,7 +328,7 @@ def ticket_view(ticket_id):
 @app.route("/counter/<service>/next", methods=["POST"])
 def api_call_next(service):
     data = request.get_json(silent=True) or {}
-    # 注意：這裡呼叫的 call_next 已經在 queue_core.py 修復過 (會跳過 cancelled)
+    # 這裡呼叫的 call_next 已經在 queue_core.py 修復過 (會跳過 cancelled)
     ticket = call_next(service, data.get("counter", "counter-1"))
     if not ticket: return jsonify({"message": "no one in queue"}), 200
     return jsonify(ticket)
