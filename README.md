@@ -84,7 +84,7 @@
 ![Admin Dashboard](static/images/管理後台.png)
 ---
 
-## 🛠️ 5. 安裝與執行 (Installation)
+## 5. 安裝與執行 (Installation)
 
 ### 本地開發 (Local Development)
 
@@ -114,7 +114,7 @@
 
 ---
 
-## 📝 6. 結論與心得 (Conclusion)
+## 6. 結論與心得 (Conclusion)
 
 「最後，我想分享一下這學期做這個個人專案的心得。
 坦白說，在做這個題目之前，我以為 Redis 就只是一個『用來做快取 (Cache)』的工具，頂多就是存取速度很快而已！
@@ -136,7 +136,7 @@
 
 ---
 
-### 🔗 附件與連結
+### 附件與連結
 
 * **Live Demo:** [https://queue.xiandbms.ggff.net](https://queue.xiandbms.ggff.net)
 * **GitHub:** [https://github.com/wesleybot/queue-dbms-project](https://github.com/wesleybot/queue-dbms-project)
